@@ -9,6 +9,16 @@ from .model import EdgeKind, Resolution, SemanticChain, SemanticEdge, SemanticGr
 
 _GRAPH_EDGE_KINDS = {EdgeKind.CALLS, EdgeKind.IMPORTS, EdgeKind.INHERITS, EdgeKind.IMPLEMENTS, EdgeKind.REFERENCES}
 
+# Public scoring constants. These stay fixed for an analyzer version so published
+# corpus scores remain comparable; changing them is an analyzer-version change,
+# not a per-repository tuning knob.
+SEMANTIC_INDEX_AUDIT_WEIGHT = 0.40
+SEMANTIC_INDEX_META_WEIGHT = 0.25
+SEMANTIC_INDEX_FAR_WEIGHT = 0.20
+SEMANTIC_INDEX_DEPTH_WEIGHT = 0.15
+SEMANTIC_INDEX_META_MULTIPLIER = 2.0
+SEMANTIC_INDEX_DEPTH_NORMALIZER = 6.0
+
 
 def resolve_relationships(graph: SemanticGraph, file_dependencies: dict[str, set[str]] | None = None) -> None:
     by_name: dict[str, list[Symbol]] = defaultdict(list)
@@ -29,6 +39,8 @@ def resolve_relationships(graph: SemanticGraph, file_dependencies: dict[str, set
         if source is None:
             continue
 
+        # An explicit file dependency is stronger evidence than a textual symbol-name
+        # match and may legitimately bridge languages (for example a generated binding).
         if edge.kind == EdgeKind.IMPORTS and file_dependencies:
             candidate_paths = file_dependencies.get(source.path, set())
             file_candidates = [
@@ -56,16 +68,23 @@ def resolve_relationships(graph: SemanticGraph, file_dependencies: dict[str, set
 
         same_path = [candidate for candidate in candidates if candidate.path == source.path]
         same_parent = [candidate for candidate in same_path if candidate.parent_id == source.parent_id]
+        same_language = [candidate for candidate in candidates if candidate.language == source.language]
+
         if len(same_parent) == 1:
             edge.target_id = same_parent[0].id
             edge.resolution = Resolution.EXACT
         elif len(same_path) == 1:
             edge.target_id = same_path[0].id
             edge.resolution = Resolution.EXACT
-        elif len(candidates) == 1:
-            edge.target_id = candidates[0].id
+        elif len(same_language) == 1:
+            edge.target_id = same_language[0].id
             edge.resolution = Resolution.EXACT
+        elif same_language:
+            edge.target_id = sorted(same_language, key=lambda s: (s.path, s.start_line, s.qualified_name))[0].id
+            edge.resolution = Resolution.PROBABLE
         else:
+            # A bare name match across languages is never canonical evidence. Keep the
+            # candidate visible, but require an adapter or explicit dependency to prove it.
             edge.target_id = sorted(candidates, key=lambda s: (s.path, s.start_line, s.qualified_name))[0].id
             edge.resolution = Resolution.PROBABLE
 
@@ -182,10 +201,13 @@ def compute_semantic_metrics(graph: SemanticGraph) -> SemanticMetrics:
     far_share = _ratio(far, total_symbols)
     semantic_index = 100.0 * min(
         1.0,
-        (0.40 * audit_share)
-        + (0.25 * meta_share * 2.0)
-        + (0.20 * far_share)
-        + (0.15 * min(max_recursive_depth / 6.0, 1.0)),
+        (SEMANTIC_INDEX_AUDIT_WEIGHT * audit_share)
+        + (SEMANTIC_INDEX_META_WEIGHT * meta_share * SEMANTIC_INDEX_META_MULTIPLIER)
+        + (SEMANTIC_INDEX_FAR_WEIGHT * far_share)
+        + (
+            SEMANTIC_INDEX_DEPTH_WEIGHT
+            * min(max_recursive_depth / SEMANTIC_INDEX_DEPTH_NORMALIZER, 1.0)
+        ),
     )
 
     return SemanticMetrics(
