@@ -7,7 +7,7 @@ on:
     paths:
       - '.github/workflows/inaugural-four.yml'
       - 'benchmarks/inaugural-four.json'
-      - 'vendor/Ouroboros-PR66-8ae6038.zip'
+      - 'vendor/Ouroboros.b64.part*'
   workflow_dispatch:
 
 permissions:
@@ -58,17 +58,29 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install frozen Ouroboros
+      - name: Reconstruct and verify frozen Ouroboros
         shell: bash
         run: |
           set -euo pipefail
           mkdir engine
-          unzip -q index/vendor/Ouroboros-PR66-8ae6038.zip -d engine
-          python -m pip install --disable-pip-version-check -e engine/Ouroboros
+          cat index/vendor/Ouroboros.b64.part* | tr -d '\n\r' | base64 --decode > "${RUNNER_TEMP}/Ouroboros.zip"
+          python - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'Ouroboros.zip'
+          expected = '0ca15ed5f73a61bb86c6e62e1e4ecc872dc3ed6864ff7127c781381094c93cc2'
+          actual = hashlib.sha256(path.read_bytes()).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'Ouroboros package integrity failure: {actual} != {expected}')
+          print(f'Ouroboros package verified: {actual}')
+          PY
+          unzip -q "${RUNNER_TEMP}/Ouroboros.zip" -d engine
+          python -m compileall -q engine/Ouroboros/src
 
       - name: Analyze repository
         shell: bash
         env:
+          PYTHONPATH: engine/Ouroboros/src
           TARGET_REPO: ${{ matrix.repo }}
           TARGET_SHA: ${{ matrix.sha }}
           TARGET_SLUG: ${{ matrix.slug }}
@@ -76,8 +88,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          ouroboros analyze target --json > out/analysis.json
-          ouroboros analyze target --html out/report.html --top 40 > out/analysis.txt
+          python -m ouroboros.cli analyze target --json > out/analysis.json
+          python -m ouroboros.cli analyze target --html out/report.html --top 40 > out/analysis.txt
           python - <<'PY'
           import json, os
           from pathlib import Path
@@ -125,13 +137,15 @@ jobs:
           records=[]
           for p in Path('artifacts').glob('*/record.json'):
               records.append(json.loads(p.read_text()))
+          if len(records) != 4:
+              raise SystemExit(f'Expected 4 complete records, found {len(records)}')
           records.sort(key=lambda r:r['metrics']['ouroboros_index'], reverse=True)
           Path('aggregate').mkdir()
           Path('aggregate/inaugural-four.json').write_text(json.dumps(records, indent=2, sort_keys=True)+'\n')
-          lines=['# Inaugural Ouroboros benchmark','', '| Repository | Product | Tooling | Audit | Meta | Scaffold/Product | Depth | Ouroboros |','|---|---:|---:|---:|---:|---:|---:|---:|']
+          lines=['# Inaugural Ouroboros benchmark','', '| Repository | Product | Product+essential | Tooling | Audit | Meta | Scaffold/Product | Depth | Ouroboros |','|---|---:|---:|---:|---:|---:|---:|---:|---:|']
           for r in records:
               m=r['metrics']
-              lines.append(f"| {r['repository']} | {m['direct_product_share']*100:.1f}% | {m['tooling_share']*100:.1f}% | {m['audit_ratio']*100:.1f}% | {m['meta_machinery_share']*100:.1f}% | {m['scaffolding_ratio']:.2f}:1 | {m['max_audit_depth']} | {m['ouroboros_index']:.1f} |")
+              lines.append(f"| {r['repository']} | {m['direct_product_share']*100:.1f}% | {m['product_plus_essential_share']*100:.1f}% | {m['tooling_share']*100:.1f}% | {m['audit_ratio']*100:.1f}% | {m['meta_machinery_share']*100:.1f}% | {m['scaffolding_ratio']:.2f}:1 | {m['max_audit_depth']} | {m['ouroboros_index']:.1f} |")
           Path('aggregate/README.md').write_text('\n'.join(lines)+'\n')
           print('\n'.join(lines))
           PY
