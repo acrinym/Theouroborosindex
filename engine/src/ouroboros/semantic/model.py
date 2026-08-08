@@ -114,6 +114,7 @@ class SemanticMetrics:
     machinery_symbol_share: float
     far_from_value_symbol_share: float
     resolution_rate: float
+    exact_resolution_rate: float
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -123,6 +124,7 @@ class SemanticMetrics:
 class SemanticChain:
     symbol_ids: list[str]
     categories: list[Category]
+    relationships: list[EdgeKind] = field(default_factory=list)
 
     @property
     def depth(self) -> int:
@@ -132,7 +134,9 @@ class SemanticChain:
         return {
             "symbol_ids": self.symbol_ids,
             "categories": [category.value for category in self.categories],
+            "relationships": [relationship.value for relationship in self.relationships],
             "depth": self.depth,
+            "canonical_resolution": Resolution.EXACT.value,
         }
 
 
