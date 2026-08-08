@@ -7,7 +7,7 @@ on:
     paths:
       - '.github/workflows/inaugural-four.yml'
       - 'benchmarks/inaugural-four.json'
-      - 'vendor/Ouroboros.b64.part*'
+      - 'engine/**'
   workflow_dispatch:
 
 permissions:
@@ -58,29 +58,40 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Reconstruct and verify frozen Ouroboros
+      - name: Reconstruct and verify exact Ouroboros source
         shell: bash
         run: |
           set -euo pipefail
-          mkdir engine
-          cat index/vendor/Ouroboros.b64.part* | tr -d '\n\r' | base64 --decode > "${RUNNER_TEMP}/Ouroboros.zip"
+          cat index/engine/parts/classify.py.part0 index/engine/parts/classify.py.part1 > index/engine/src/ouroboros/classify.py
+          cat index/engine/parts/graph.py.part0 index/engine/parts/graph.py.part1 > index/engine/src/ouroboros/graph.py
           python - <<'PY'
-          import hashlib, os
+          import hashlib
           from pathlib import Path
-          path = Path(os.environ['RUNNER_TEMP']) / 'Ouroboros.zip'
-          expected = '0ca15ed5f73a61bb86c6e62e1e4ecc872dc3ed6864ff7127c781381094c93cc2'
-          actual = hashlib.sha256(path.read_bytes()).hexdigest()
-          if actual != expected:
-              raise SystemExit(f'Ouroboros package integrity failure: {actual} != {expected}')
-          print(f'Ouroboros package verified: {actual}')
+          expected = {
+              '__init__.py': '877fea5537cdf0ece777c663ff5f0edee05a57b9',
+              'analyze.py': '4f7bf572968d2a624e0363a96932566151d58323',
+              'classify.py': '6f465f358cb62c7fa7f1e721e587fbbd66c3222d',
+              'config.py': 'b0f9378c325f78bc0182423ef0a4e4f998eedaab',
+              'graph.py': '2bee4deec6682716cc4a5180337bb756b681387b',
+              'metrics.py': '8adf2dceb46d65c351751c7feadd6549e2a56aef',
+              'model.py': '1371c1f72d8587de6f77f1ee365fcc57bc5244db',
+              'profiles.py': '76cd56beee58465eb841f0e962d2a4819ccb8a60',
+              'scanner.py': 'b4944a779d009d3d939345c8d3d1c22ba569b0c5',
+          }
+          root = Path('index/engine/src/ouroboros')
+          for name, want in expected.items():
+              data = (root / name).read_bytes()
+              actual = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+              if actual != want:
+                  raise SystemExit(f'{name}: {actual} != {want}')
+          print('Exact Ouroboros source verified against original Git blob IDs.')
           PY
-          unzip -q "${RUNNER_TEMP}/Ouroboros.zip" -d engine
-          python -m compileall -q engine/Ouroboros/src
+          python -m compileall -q index/engine/src
 
       - name: Analyze repository
         shell: bash
         env:
-          PYTHONPATH: engine/Ouroboros/src
+          PYTHONPATH: index/engine/src
           TARGET_REPO: ${{ matrix.repo }}
           TARGET_SHA: ${{ matrix.sha }}
           TARGET_SLUG: ${{ matrix.slug }}
@@ -88,24 +99,40 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m ouroboros.cli analyze target --json > out/analysis.json
-          python -m ouroboros.cli analyze target --html out/report.html --top 40 > out/analysis.txt
           python - <<'PY'
           import json, os
           from pathlib import Path
-          analysis = json.loads(Path('out/analysis.json').read_text())
+          from ouroboros.analyze import analyze_repository
+
+          analysis = analyze_repository('target')
+          payload = analysis.to_dict()
+          Path('out/analysis.json').write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
+          m = analysis.metrics
           record = {
               'repository': os.environ['TARGET_REPO'],
               'sha': os.environ['TARGET_SHA'],
               'stars_at_scan': int(os.environ['TARGET_STARS']),
               'analyzer': {'name':'Ouroboros','version':'0.1.0','source_head':'8ae603829e5ca4be7b0961a5d9dd5d20393b837d'},
-              'metrics': analysis['metrics'],
-              'warnings': analysis.get('warnings', []),
-              'audit_chains': analysis.get('audit_chains', []),
-              'directory_profiles': analysis.get('directory_profiles', [])[:30],
-              'category_code_lines': analysis['metrics']['category_code_lines'],
+              'metrics': m.to_dict(),
+              'warnings': analysis.warnings,
+              'audit_chains': [c.to_dict() for c in analysis.audit_chains],
+              'directory_profiles': [p.to_dict() for p in analysis.directory_profiles[:30]],
           }
           Path('out/record.json').write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
+          lines = [
+              f"Repository: {record['repository']} @ {record['sha']}",
+              f"Direct product: {m.direct_product_share*100:.1f}%",
+              f"Product + essential: {m.product_plus_essential_share*100:.1f}%",
+              f"Tooling: {m.tooling_share*100:.1f}%",
+              f"Audit: {m.audit_ratio*100:.1f}%",
+              f"Meta-machinery: {m.meta_machinery_share*100:.1f}%",
+              f"Scaffolding/product: {m.scaffolding_ratio:.2f}:1",
+              f"Maximum audit depth: {m.max_audit_depth}",
+              f"Ouroboros Index: {m.ouroboros_index:.1f}/100",
+              '', 'Warnings:', *(analysis.warnings or ['none']),
+          ]
+          Path('out/analysis.txt').write_text('\n'.join(lines) + '\n')
+          print('\n'.join(lines))
           PY
 
       - name: Upload result bundle
@@ -134,9 +161,7 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          records=[]
-          for p in Path('artifacts').glob('*/record.json'):
-              records.append(json.loads(p.read_text()))
+          records=[json.loads(p.read_text()) for p in Path('artifacts').glob('*/record.json')]
           if len(records) != 4:
               raise SystemExit(f'Expected 4 complete records, found {len(records)}')
           records.sort(key=lambda r:r['metrics']['ouroboros_index'], reverse=True)

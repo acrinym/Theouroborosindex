@@ -1,0 +1,59 @@
+            undirected[source].add(target)
+            undirected[target].add(source)
+
+    product_paths = [c.path for c in components if c.category in PRODUCT_CATEGORIES]
+    distances: dict[str, int] = {}
+    queue = deque((path, 0) for path in product_paths)
+    while queue:
+        path, distance = queue.popleft()
+        if path in distances and distances[path] <= distance:
+            continue
+        distances[path] = distance
+        for neighbor in undirected.get(path, ()):
+            if neighbor not in distances:
+                queue.append((neighbor, distance + 1))
+
+    for component in components:
+        structural = distances.get(component.path)
+        base = CATEGORY_DISTANCE_BASE[component.category]
+        component.value_distance = max(base, structural) if structural is not None else base
+
+
+def find_audit_chains(components: list[Component], graph: dict[str, set[str]], max_depth: int = 8) -> list[AuditChain]:
+    component_by_path = {c.path: c for c in components}
+    reverse: dict[str, set[str]] = defaultdict(set)
+    for source, targets in graph.items():
+        for target in targets:
+            reverse[target].add(source)
+
+    chains: list[AuditChain] = []
+    for root in components:
+        if root.category not in PRODUCT_CATEGORIES:
+            continue
+        stack: list[tuple[str, list[str]]] = [(root.path, [root.path])]
+        while stack:
+            current, path = stack.pop()
+            if len(path) - 1 >= max_depth:
+                continue
+            for caller in reverse.get(current, ()):
+                if caller in path:
+                    continue
+                caller_component = component_by_path[caller]
+                if caller_component.category not in RECURSIVE_CATEGORIES:
+                    continue
+                next_path = path + [caller]
+                chains.append(AuditChain(paths=next_path, categories=[component_by_path[p].category for p in next_path]))
+                stack.append((caller, next_path))
+
+    chains.sort(key=lambda c: (c.depth, sum(component_by_path[p].code_lines for p in c.paths)), reverse=True)
+    deduped: list[AuditChain] = []
+    seen: set[tuple[str, ...]] = set()
+    for chain in chains:
+        key = tuple(chain.paths)
+        if key in seen:
+            continue
+        seen.add(key)
+        if any(tuple(other.paths[: len(chain.paths)]) == key for other in deduped):
+            continue
+        deduped.append(chain)
+    return deduped[:25]

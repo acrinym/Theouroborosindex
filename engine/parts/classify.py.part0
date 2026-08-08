@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import math
+import re
+from collections import defaultdict
+
+from .model import Category, Component, Signal
+from .scanner import ScannedFile
+
+
+CATEGORY_RULES: dict[Category, tuple[str, ...]] = {
+    Category.TESTING: ("test", "tests", "spec", "specs", "fixture", "fixtures", "mock", "mocks", "assert", "pytest", "unittest", "xunit", "nunit", "jest", "vitest"),
+    Category.META_MACHINERY: ("meta-audit", "audit auditor", "audit of audit", "validator validator", "verify verifier", "check checker", "report validator", "quality of audit", "audit quality", "compliance of compliance", "tooling analyzer"),
+    Category.AUDIT_PROVENANCE: ("audit", "auditor", "provenance", "receipt", "receipts", "evidence ledger", "reconcile", "reconciliation", "attestation", "traceability", "lineage record"),
+    Category.VERIFICATION: ("verify", "verification", "validate", "validation", "validator", "integrity", "checksum", "consistency", "invariant", "sanity check", "precondition", "postcondition", "assertion"),
+    Category.OBSERVABILITY: ("telemetry", "tracing", "trace", "metrics", "logging", "logger", "monitoring", "instrumentation", "diagnostic", "diagnostics", "span", "opentelemetry"),
+    Category.PROCESS_MACHINERY: ("workflow", "pipeline", "ci", "cd", "release", "packaging", "deploy", "deployment", "quality gate", "approval gate", "build orchestration"),
+    Category.DEVELOPER_TOOLING: ("tool", "tools", "generator", "scaffold", "scaffolding", "migration", "migrate", "bootstrap", "devtool", "codemod", "benchmark", "bench", "script", "scripts"),
+    Category.USER_SURFACE: ("ui", "gui", "view", "views", "page", "pages", "screen", "dialog", "window", "controller", "route", "routes", "endpoint", "api", "cli", "command", "commands", "frontend", "component", "components", "interaction", "input", "menu"),
+    Category.ESSENTIAL_SUPPORT: ("storage", "database", "repository", "persistence", "serializer", "serialization", "network", "http", "adapter", "adapters", "cache", "filesystem", "file system", "transport", "protocol", "config", "configuration", "loader", "parser"),
+    Category.CORE_PRODUCT: ("gameplay", "game", "engine", "domain", "model", "models", "service", "services", "simulation", "render", "audio", "combat", "inventory", "session", "editor", "player", "business logic", "core"),
+    Category.DOCUMENTATION: ("docs", "documentation", "readme", "guide", "manual", "tutorial", "architecture decision"),
+}
+
+PATH_PRIORITY = {
+    Category.META_MACHINERY: 4.2, Category.AUDIT_PROVENANCE: 3.8, Category.TESTING: 4.0,
+    Category.PROCESS_MACHINERY: 3.5, Category.OBSERVABILITY: 3.3, Category.VERIFICATION: 3.2,
+    Category.USER_SURFACE: 2.9, Category.ESSENTIAL_SUPPORT: 2.5, Category.DEVELOPER_TOOLING: 2.8,
+    Category.CORE_PRODUCT: 2.1, Category.DOCUMENTATION: 4.5,
+}
+
+MACHINERY_WORDS = {"audit", "verify", "validator", "validation", "receipt", "provenance", "telemetry", "diagnostic", "report", "reconcile", "checker", "monitor", "workflow", "pipeline"}
+
+
+def _normalized_tokens(value: str) -> set[str]:
+    value = re.sub(r"([a-z])([A-Z])", r"\1 \2", value)
+    return set(re.findall(r"[a-z0-9]+", value.lower().replace("_", " ").replace("-", " ")))
+
+
+def _phrase_hits(haystack: str, phrases: tuple[str, ...]) -> list[str]:
+    hits = []
+    for phrase in phrases:
+        if " " in phrase:
+            if phrase in haystack:
+                hits.append(phrase)
+        elif re.search(rf"\b{re.escape(phrase)}\w*\b", haystack):
+            hits.append(phrase)
+    return hits
+
+
+def classify(scanned: ScannedFile, override: Category | None = None) -> Component:
+    component = scanned.component
+    if override is not None:
+        component.category = override

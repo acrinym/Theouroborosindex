@@ -1,0 +1,11 @@
+{
+  "name": "Ouroboros",
+  "version": "0.1.0",
+  "source_repository": "acrinym/Secretprojects",
+  "source_path": "Ouroboros/",
+  "source_head": "8ae603829e5ca4be7b0961a5d9dd5d20393b837d",
+  "reconstructed_modules": {
+    "classify.py": "6f465f358cb62c7fa7f1e721e587fbbd66c3222d",
+    "graph.py": "2bee4deec6682716cc4a5180337bb756b681387b"
+  }
+}
