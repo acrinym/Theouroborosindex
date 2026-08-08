@@ -115,6 +115,7 @@ jobs:
                   'baseline': '0.1.0',
                   'parser': 'tree-sitter-language-pack==1.13.3',
                   'canonical_topology': 'exact-edges-only',
+                  'semantic_index_formula': 'same weights as 0.1 applied to symbol audit/meta share + exact graph distance/depth',
               },
               'metrics': metrics.to_dict(),
               'diagnostics': [d.to_dict() for d in semantic.diagnostics],
@@ -148,14 +149,14 @@ jobs:
           rows = [json.loads(path.read_text()) for path in Path('artifacts').glob('*/semantic.json')]
           if len(rows) != 4:
               raise SystemExit(f'Expected four semantic records, found {len(rows)}')
-          rows.sort(key=lambda row: row['metrics']['max_recursive_depth'], reverse=True)
+          rows.sort(key=lambda row: row['metrics']['semantic_ouroboros_index'], reverse=True)
           Path('aggregate').mkdir()
           Path('aggregate/semantic-inaugural-four.json').write_text(json.dumps(rows, indent=2, sort_keys=True) + '\n')
-          print('| Repository | Symbols | Relationships | Exact | Resolvable | Product symbols | Machinery symbols | Far >=4 | Max distance | Recursive depth |')
+          print('| Repository | Symbols | Exact | Resolvable | Product symbols | Machinery symbols | Scaffold/Product | Far >=4 | Depth | Semantic Index |')
           print('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
           for row in rows:
               m = row['metrics']
-              print(f"| {row['repository']} | {m['symbol_count']} | {m['relationship_count']} | {m['exact_resolution_rate']*100:.1f}% | {m['resolution_rate']*100:.1f}% | {m['direct_product_symbol_share']*100:.1f}% | {m['machinery_symbol_share']*100:.1f}% | {m['far_from_value_symbol_share']*100:.1f}% | {m['max_value_distance']} | {m['max_recursive_depth']} |")
+              print(f"| {row['repository']} | {m['symbol_count']} | {m['exact_resolution_rate']*100:.1f}% | {m['resolution_rate']*100:.1f}% | {m['direct_product_symbol_share']*100:.1f}% | {m['machinery_symbol_share']*100:.1f}% | {m['scaffolding_symbol_ratio']:.2f}:1 | {m['far_from_value_symbol_share']*100:.1f}% | {m['max_recursive_depth']} | {m['semantic_ouroboros_index']:.1f} |")
           PY
       - uses: actions/upload-artifact@v4
         with:
