@@ -83,6 +83,43 @@ def test_probable_match_cannot_create_canonical_distance_or_depth():
     assert graph.metrics.resolution_rate == 1.0
 
 
+def test_cross_language_name_match_is_never_promoted_to_exact():
+    product = Symbol(
+        id="product.py::bridge@1", path="product.py", language="python", kind=SymbolKind.FUNCTION,
+        name="bridge", qualified_name="bridge", start_line=1, end_line=1, category=Category.CORE_PRODUCT,
+    )
+    verifier = Symbol(
+        id="Verify.cs::Validate@1", path="Verify.cs", language="csharp", kind=SymbolKind.METHOD,
+        name="Validate", qualified_name="Validate", start_line=1, end_line=1, category=Category.VERIFICATION,
+    )
+    edge = SemanticEdge(
+        source_id=verifier.id,
+        kind=EdgeKind.CALLS,
+        target_name="bridge",
+        evidence="bare cross-language name match",
+    )
+    graph = SemanticGraph(symbols={product.id: product, verifier.id: verifier}, edges=[edge])
+    finalize_graph(graph)
+    assert edge.target_id == product.id
+    assert edge.resolution == Resolution.PROBABLE
+    assert product.value_distance == 0
+    assert verifier.value_distance is None
+    assert graph.metrics is not None
+    assert graph.metrics.max_recursive_depth == 0
+
+
+def test_empty_graph_has_stable_zero_metrics():
+    graph = finalize_graph(SemanticGraph())
+    assert graph.metrics is not None
+    assert graph.metrics.symbol_count == 0
+    assert graph.metrics.relationship_count == 0
+    assert graph.metrics.semantic_ouroboros_index == 0.0
+    assert graph.metrics.max_recursive_depth == 0
+    assert graph.metrics.resolution_rate == 1.0
+    assert graph.metrics.exact_resolution_rate == 1.0
+    assert graph.chains == []
+
+
 def test_unresolved_dynamic_target_is_retained_not_invented():
     graph = build_semantic_graph([
         scanned("app.py", """
