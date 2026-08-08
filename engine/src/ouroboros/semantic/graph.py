@@ -154,6 +154,10 @@ def find_recursive_chains(graph: SemanticGraph, max_depth: int = 12) -> list[Sem
     return sorted(unique.values(), key=lambda chain: (-chain.depth, chain.symbol_ids))[:50]
 
 
+def _ratio(numerator: float, denominator: float) -> float:
+    return 0.0 if denominator <= 0 else numerator / denominator
+
+
 def compute_semantic_metrics(graph: SemanticGraph) -> SemanticMetrics:
     symbols = [symbol for symbol in graph.symbols.values() if symbol.kind != SymbolKind.FILE]
     relationships = [edge for edge in graph.edges if edge.kind != EdgeKind.CONTAINS]
@@ -163,10 +167,27 @@ def compute_semantic_metrics(graph: SemanticGraph) -> SemanticMetrics:
     unresolved = sum(edge.resolution == Resolution.UNRESOLVED for edge in relationships)
     product = sum(symbol.category in PRODUCT_CATEGORIES for symbol in symbols)
     machinery = sum(symbol.category in MACHINERY_CATEGORIES for symbol in symbols)
+    audit = sum(symbol.category in {Category.AUDIT_PROVENANCE, Category.META_MACHINERY} for symbol in symbols)
+    meta = sum(symbol.category == Category.META_MACHINERY for symbol in symbols)
     reachable = sum(symbol.value_distance is not None for symbol in symbols)
     far = sum((symbol.value_distance or 0) >= 4 for symbol in symbols if symbol.value_distance is not None)
     max_distance = max((symbol.value_distance or 0 for symbol in symbols), default=0)
     max_recursive_depth = max((chain.depth for chain in graph.chains), default=0)
+
+    product_share = _ratio(product, total_symbols)
+    machinery_share = _ratio(machinery, total_symbols)
+    audit_share = _ratio(audit, total_symbols)
+    meta_share = _ratio(meta, total_symbols)
+    scaffolding_ratio = _ratio(machinery, product)
+    far_share = _ratio(far, total_symbols)
+    semantic_index = 100.0 * min(
+        1.0,
+        (0.40 * audit_share)
+        + (0.25 * meta_share * 2.0)
+        + (0.20 * far_share)
+        + (0.15 * min(max_recursive_depth / 6.0, 1.0)),
+    )
+
     return SemanticMetrics(
         symbol_count=total_symbols,
         relationship_count=len(relationships),
@@ -175,15 +196,21 @@ def compute_semantic_metrics(graph: SemanticGraph) -> SemanticMetrics:
         unresolved_relationships=unresolved,
         product_symbols=product,
         machinery_symbols=machinery,
+        audit_symbols=audit,
+        meta_symbols=meta,
         product_reachable_symbols=reachable,
         far_from_value_symbols=far,
         max_value_distance=max_distance,
         max_recursive_depth=max_recursive_depth,
-        direct_product_symbol_share=product / total_symbols if total_symbols else 0.0,
-        machinery_symbol_share=machinery / total_symbols if total_symbols else 0.0,
-        far_from_value_symbol_share=far / total_symbols if total_symbols else 0.0,
-        resolution_rate=(resolved + probable) / len(relationships) if relationships else 1.0,
-        exact_resolution_rate=resolved / len(relationships) if relationships else 1.0,
+        direct_product_symbol_share=product_share,
+        machinery_symbol_share=machinery_share,
+        audit_symbol_share=audit_share,
+        meta_symbol_share=meta_share,
+        scaffolding_symbol_ratio=scaffolding_ratio,
+        far_from_value_symbol_share=far_share,
+        resolution_rate=_ratio(resolved + probable, len(relationships)) if relationships else 1.0,
+        exact_resolution_rate=_ratio(resolved, len(relationships)) if relationships else 1.0,
+        semantic_ouroboros_index=semantic_index,
     )
 
 
