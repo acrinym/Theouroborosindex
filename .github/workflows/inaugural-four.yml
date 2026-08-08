@@ -1,0 +1,145 @@
+name: Ouroboros inaugural four
+
+on:
+  push:
+    branches:
+      - agent/inaugural-four-index-20260807
+    paths:
+      - '.github/workflows/inaugural-four.yml'
+      - 'benchmarks/inaugural-four.json'
+      - 'vendor/Ouroboros-PR66-8ae6038.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.slug }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slug: bitchat
+            repo: permissionlesstech/bitchat
+            sha: 1f59e814f90c3f489f48d68262cb1bf640bf6181
+            stars: 34736
+          - slug: git-city
+            repo: srizzon/git-city
+            sha: bb4d9102af6126970bbce1fb3e20d818df4a535f
+            stars: 5750
+          - slug: deepseek-ocr-app
+            repo: rdumasia303/deepseek_ocr_app
+            sha: 3dac0741b18afc934c063e8528e7576f4d63efe5
+            stars: 1887
+          - slug: ryos
+            repo: ryokun6/ryos
+            sha: c599b3102900f20f66c48dff2b4562d07ddd52cf
+            stars: 1223
+
+    steps:
+      - name: Checkout index
+        uses: actions/checkout@v4
+        with:
+          path: index
+
+      - name: Checkout target at frozen SHA
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.sha }}
+          path: target
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install frozen Ouroboros
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir engine
+          unzip -q index/vendor/Ouroboros-PR66-8ae6038.zip -d engine
+          python -m pip install --disable-pip-version-check -e engine/Ouroboros
+
+      - name: Analyze repository
+        shell: bash
+        env:
+          TARGET_REPO: ${{ matrix.repo }}
+          TARGET_SHA: ${{ matrix.sha }}
+          TARGET_SLUG: ${{ matrix.slug }}
+          TARGET_STARS: ${{ matrix.stars }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          ouroboros analyze target --json > out/analysis.json
+          ouroboros analyze target --html out/report.html --top 40 > out/analysis.txt
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          analysis = json.loads(Path('out/analysis.json').read_text())
+          record = {
+              'repository': os.environ['TARGET_REPO'],
+              'sha': os.environ['TARGET_SHA'],
+              'stars_at_scan': int(os.environ['TARGET_STARS']),
+              'analyzer': {'name':'Ouroboros','version':'0.1.0','source_head':'8ae603829e5ca4be7b0961a5d9dd5d20393b837d'},
+              'metrics': analysis['metrics'],
+              'warnings': analysis.get('warnings', []),
+              'audit_chains': analysis.get('audit_chains', []),
+              'directory_profiles': analysis.get('directory_profiles', [])[:30],
+              'category_code_lines': analysis['metrics']['category_code_lines'],
+          }
+          Path('out/record.json').write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Upload result bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ouroboros-${{ matrix.slug }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
+
+  aggregate:
+    name: Aggregate inaugural benchmark
+    needs: analyze
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download result bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ouroboros-*
+          path: artifacts
+
+      - name: Build leaderboard
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          records=[]
+          for p in Path('artifacts').glob('*/record.json'):
+              records.append(json.loads(p.read_text()))
+          records.sort(key=lambda r:r['metrics']['ouroboros_index'], reverse=True)
+          Path('aggregate').mkdir()
+          Path('aggregate/inaugural-four.json').write_text(json.dumps(records, indent=2, sort_keys=True)+'\n')
+          lines=['# Inaugural Ouroboros benchmark','', '| Repository | Product | Tooling | Audit | Meta | Scaffold/Product | Depth | Ouroboros |','|---|---:|---:|---:|---:|---:|---:|---:|']
+          for r in records:
+              m=r['metrics']
+              lines.append(f"| {r['repository']} | {m['direct_product_share']*100:.1f}% | {m['tooling_share']*100:.1f}% | {m['audit_ratio']*100:.1f}% | {m['meta_machinery_share']*100:.1f}% | {m['scaffolding_ratio']:.2f}:1 | {m['max_audit_depth']} | {m['ouroboros_index']:.1f} |")
+          Path('aggregate/README.md').write_text('\n'.join(lines)+'\n')
+          print('\n'.join(lines))
+          PY
+
+      - name: Upload aggregate
+        uses: actions/upload-artifact@v4
+        with:
+          name: ouroboros-inaugural-four
+          path: aggregate/
+          if-no-files-found: error
+          retention-days: 30
