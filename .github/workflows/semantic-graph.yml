@@ -3,7 +3,7 @@ name: Ouroboros semantic graph
 on:
   push:
     branches:
-      - agent/inaugural-four-index-20260807
+      - main
   pull_request:
     branches:
       - main
@@ -114,6 +114,7 @@ jobs:
                   'version': '0.2.0-semantic',
                   'baseline': '0.1.0',
                   'parser': 'tree-sitter-language-pack==1.13.3',
+                  'canonical_topology': 'exact-edges-only',
               },
               'metrics': metrics.to_dict(),
               'diagnostics': [d.to_dict() for d in semantic.diagnostics],
@@ -150,11 +151,11 @@ jobs:
           rows.sort(key=lambda row: row['metrics']['max_recursive_depth'], reverse=True)
           Path('aggregate').mkdir()
           Path('aggregate/semantic-inaugural-four.json').write_text(json.dumps(rows, indent=2, sort_keys=True) + '\n')
-          print('| Repository | Symbols | Relationships | Resolution | Product symbols | Machinery symbols | Far >=4 | Max distance | Recursive depth |')
-          print('|---|---:|---:|---:|---:|---:|---:|---:|---:|')
+          print('| Repository | Symbols | Relationships | Exact | Resolvable | Product symbols | Machinery symbols | Far >=4 | Max distance | Recursive depth |')
+          print('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
           for row in rows:
               m = row['metrics']
-              print(f"| {row['repository']} | {m['symbol_count']} | {m['relationship_count']} | {m['resolution_rate']*100:.1f}% | {m['direct_product_symbol_share']*100:.1f}% | {m['machinery_symbol_share']*100:.1f}% | {m['far_from_value_symbol_share']*100:.1f}% | {m['max_value_distance']} | {m['max_recursive_depth']} |")
+              print(f"| {row['repository']} | {m['symbol_count']} | {m['relationship_count']} | {m['exact_resolution_rate']*100:.1f}% | {m['resolution_rate']*100:.1f}% | {m['direct_product_symbol_share']*100:.1f}% | {m['machinery_symbol_share']*100:.1f}% | {m['far_from_value_symbol_share']*100:.1f}% | {m['max_value_distance']} | {m['max_recursive_depth']} |")
           PY
       - uses: actions/upload-artifact@v4
         with:
