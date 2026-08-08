@@ -70,11 +70,23 @@ def resolve_relationships(graph: SemanticGraph, file_dependencies: dict[str, set
             edge.resolution = Resolution.PROBABLE
 
 
+def _canonical_edges(graph: SemanticGraph):
+    """Edges trusted for canonical reachability and recursive depth.
+
+    Probable matches remain in the graph for inspection and coverage reporting, but they are
+    never allowed to create product reachability, Distance From Value, or Ouroboros chains.
+    """
+    return (
+        edge for edge in graph.edges
+        if edge.kind in _GRAPH_EDGE_KINDS
+        and edge.target_id is not None
+        and edge.resolution == Resolution.EXACT
+    )
+
+
 def assign_symbol_value_distances(graph: SemanticGraph) -> None:
     adjacency: dict[str, set[str]] = {symbol_id: set() for symbol_id in graph.symbols}
-    for edge in graph.edges:
-        if edge.kind not in _GRAPH_EDGE_KINDS or edge.target_id is None:
-            continue
+    for edge in _canonical_edges(graph):
         if edge.source_id not in adjacency or edge.target_id not in adjacency:
             continue
         adjacency[edge.source_id].add(edge.target_id)
@@ -103,11 +115,9 @@ def assign_symbol_value_distances(graph: SemanticGraph) -> None:
 
 
 def find_recursive_chains(graph: SemanticGraph, max_depth: int = 12) -> list[SemanticChain]:
-    reverse: dict[str, set[str]] = defaultdict(set)
-    for edge in graph.edges:
-        if edge.kind not in _GRAPH_EDGE_KINDS or edge.target_id is None:
-            continue
-        reverse[edge.target_id].add(edge.source_id)
+    reverse: dict[str, list[SemanticEdge]] = defaultdict(list)
+    for edge in _canonical_edges(graph):
+        reverse[edge.target_id].append(edge)
 
     roots = [
         symbol.id for symbol in graph.symbols.values()
@@ -115,27 +125,30 @@ def find_recursive_chains(graph: SemanticGraph, max_depth: int = 12) -> list[Sem
     ]
     chains: list[SemanticChain] = []
 
-    def walk(current: str, path: list[str], seen: set[str]) -> None:
+    def walk(current: str, path: list[str], relationships: list[EdgeKind], seen: set[str]) -> None:
         if len(path) - 1 >= max_depth:
             return
-        for dependent in reverse.get(current, ()):
+        for edge in reverse.get(current, ()):
+            dependent = edge.source_id
             if dependent in seen:
                 continue
             symbol = graph.symbols.get(dependent)
             if symbol is None:
                 continue
             new_path = path + [dependent]
+            new_relationships = relationships + [edge.kind]
             if symbol.category in RECURSIVE_CATEGORIES:
                 chains.append(SemanticChain(
                     symbol_ids=new_path,
                     categories=[graph.symbols[sid].category for sid in new_path],
+                    relationships=new_relationships,
                 ))
-                walk(dependent, new_path, seen | {dependent})
+                walk(dependent, new_path, new_relationships, seen | {dependent})
             elif symbol.category in MACHINERY_CATEGORIES:
-                walk(dependent, new_path, seen | {dependent})
+                walk(dependent, new_path, new_relationships, seen | {dependent})
 
     for root in roots:
-        walk(root, [root], {root})
+        walk(root, [root], [], {root})
 
     unique: dict[tuple[str, ...], SemanticChain] = {tuple(chain.symbol_ids): chain for chain in chains}
     return sorted(unique.values(), key=lambda chain: (-chain.depth, chain.symbol_ids))[:50]
@@ -170,6 +183,7 @@ def compute_semantic_metrics(graph: SemanticGraph) -> SemanticMetrics:
         machinery_symbol_share=machinery / total_symbols if total_symbols else 0.0,
         far_from_value_symbol_share=far / total_symbols if total_symbols else 0.0,
         resolution_rate=(resolved + probable) / len(relationships) if relationships else 1.0,
+        exact_resolution_rate=resolved / len(relationships) if relationships else 1.0,
     )
 
 
