@@ -106,15 +106,21 @@ class SemanticMetrics:
     unresolved_relationships: int
     product_symbols: int
     machinery_symbols: int
+    audit_symbols: int
+    meta_symbols: int
     product_reachable_symbols: int
     far_from_value_symbols: int
     max_value_distance: int
     max_recursive_depth: int
     direct_product_symbol_share: float
     machinery_symbol_share: float
+    audit_symbol_share: float
+    meta_symbol_share: float
+    scaffolding_symbol_ratio: float
     far_from_value_symbol_share: float
     resolution_rate: float
     exact_resolution_rate: float
+    semantic_ouroboros_index: float
 
     def to_dict(self) -> dict:
         return asdict(self)
