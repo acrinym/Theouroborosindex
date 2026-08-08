@@ -22,6 +22,26 @@ Ouroboros resolves relationships across files, computes graph reachability from 
 symbol-level Distance From Value, and walks reverse dependencies to expose real recursive machinery chains.
 An unresolved dynamic call remains unresolved; the Index does not invent a target to make the graph look complete.
 
+### Canonical topology uses exact edges only
+
+A probable relationship is evidence, not fact. Probable and unresolved edges stay in the graph and contribute to
+coverage statistics, but only `exact` relationships may:
+
+- make a symbol product-reachable;
+- change Distance From Value;
+- create or lengthen a recursive machinery chain;
+- contribute to canonical semantic depth.
+
+The report therefore exposes both an exact-resolution rate and an exact+probable resolvable rate. This prevents a
+common-name guess in a large repository from manufacturing a deep Ouroboros chain.
+
+### Category seed versus topology
+
+The 0.2 foundation inherits a symbol's initial composition category from its containing file so its topology can be
+compared directly with the frozen 0.1 classifier. The **structure is symbol-level now; the initial role label remains
+the 0.1 category seed**. A later symbol-role refinement can classify mixed-purpose methods/functions independently
+without changing the graph contract or rewriting the historical baseline.
+
 ## Language adapters
 
 Python uses the standard-library `ast` parser. The scanner's other executable source languages use
