@@ -1,0 +1,220 @@
+[
+  {
+    "analyzer": {
+      "baseline": "0.1.0",
+      "canonical_topology": "exact-edges-only",
+      "name": "Ouroboros",
+      "parser": "tree-sitter-language-pack==1.13.3",
+      "semantic_index_formula": "same weights as 0.1 applied to symbol audit/meta share + exact graph distance/depth",
+      "version": "0.2.0-semantic"
+    },
+    "deepest_chains": [
+      {
+        "canonical_resolution": "exact",
+        "categories": ["user-surface", "audit-provenance", "audit-provenance", "audit-provenance"],
+        "depth": 3,
+        "relationships": ["calls", "calls", "calls"],
+        "symbol_ids": ["scripts/apple-ui-terminology.ts::getExpectedAppleUiTerm@224", "scripts/audit-translations.ts::auditLocale@344", "scripts/audit-translations.ts::auditTranslations@483", "scripts/audit-translations.ts::<file>"]
+      },
+      {
+        "canonical_resolution": "exact",
+        "categories": ["user-surface", "audit-provenance", "audit-provenance", "audit-provenance"],
+        "depth": 3,
+        "relationships": ["calls", "calls", "calls"],
+        "symbol_ids": ["src/apps/control-panels/components/control-panels-app/controlPanelsSearch.ts::normalize@450", "scripts/audit-translations.ts::auditLocale@344", "scripts/audit-translations.ts::auditTranslations@483", "scripts/audit-translations.ts::<file>"]
+      },
+      {
+        "canonical_resolution": "exact",
+        "categories": ["user-surface", "audit-provenance", "audit-provenance", "audit-provenance"],
+        "depth": 3,
+        "relationships": ["calls", "calls", "calls"],
+        "symbol_ids": ["src/apps/stuff/components/StuffDetailPanel.tsx::blobToBase64@70", "src/utils/indexedDBBackup.ts::serializeStoreItem@211", "src/utils/indexedDBBackup.ts::readAndSerializeStoreItemByKey@124", "src/utils/indexedDBBackup.ts::readAndSerializeStoreItemsByKeys@133"]
+      }
+    ],
+    "diagnostics_count": 935,
+    "metrics": {
+      "audit_symbol_share": 0.004709141274238227,
+      "audit_symbols": 34,
+      "direct_product_symbol_share": 0.7494459833795014,
+      "exact_resolution_rate": 0.21557730111008325,
+      "far_from_value_symbol_share": 0.011218836565096953,
+      "far_from_value_symbols": 81,
+      "machinery_symbol_share": 0.2027700831024931,
+      "machinery_symbols": 1464,
+      "max_recursive_depth": 3,
+      "max_value_distance": 5,
+      "meta_symbol_share": 0.0,
+      "meta_symbols": 0,
+      "probable_relationships": 35618,
+      "product_reachable_symbols": 6688,
+      "product_symbols": 5411,
+      "relationship_count": 138368,
+      "resolution_rate": 0.47299231036077705,
+      "resolved_relationships": 29829,
+      "scaffolding_symbol_ratio": 0.2705599704306043,
+      "semantic_ouroboros_index": 7.9127423822714675,
+      "symbol_count": 7220,
+      "unresolved_relationships": 72921
+    },
+    "repository": "ryokun6/ryos",
+    "sha": "c599b3102900f20f66c48dff2b4562d07ddd52cf"
+  },
+  {
+    "analyzer": {
+      "baseline": "0.1.0",
+      "canonical_topology": "exact-edges-only",
+      "name": "Ouroboros",
+      "parser": "tree-sitter-language-pack==1.13.3",
+      "semantic_index_formula": "same weights as 0.1 applied to symbol audit/meta share + exact graph distance/depth",
+      "version": "0.2.0-semantic"
+    },
+    "deepest_chains": [
+      {
+        "canonical_resolution": "exact",
+        "categories": ["core-product", "process-machinery", "process-machinery"],
+        "depth": 2,
+        "relationships": ["calls", "calls"],
+        "symbol_ids": ["bitchat/Models/NoisePayload.swift::NoisePayload.decode@25", "bitchat/ViewModels/NostrInboundPipeline.swift::NostrInboundPipeline.processGeohashGiftWrap@333", "bitchat/ViewModels/NostrInboundPipeline.swift::NostrInboundPipeline.handleGiftWrap@307"]
+      },
+      {
+        "canonical_resolution": "exact",
+        "categories": ["core-product", "process-machinery", "process-machinery"],
+        "depth": 2,
+        "relationships": ["calls", "calls"],
+        "symbol_ids": ["bitchat/Models/NoisePayload.swift::NoisePayload.decode@25", "bitchat/ViewModels/NostrInboundPipeline.swift::NostrInboundPipeline.processGeohashGiftWrap@333", "bitchat/ViewModels/NostrInboundPipeline.swift::NostrInboundPipeline.subscribeGiftWrap@288"]
+      },
+      {
+        "canonical_resolution": "exact",
+        "categories": ["core-product", "process-machinery", "process-machinery"],
+        "depth": 2,
+        "relationships": ["calls", "calls"],
+        "symbol_ids": ["bitchat/Models/NoisePayload.swift::NoisePayload.decode@25", "bitchat/ViewModels/NostrInboundPipeline.swift::NostrInboundPipeline.processNostrMessage@422", "bitchat/ViewModels/NostrInboundPipeline.swift::NostrInboundPipeline.handleNostrMessage@406"]
+      }
+    ],
+    "diagnostics_count": 76,
+    "metrics": {
+      "audit_symbol_share": 0.007403490216816499,
+      "audit_symbols": 210,
+      "direct_product_symbol_share": 0.3365767671426053,
+      "exact_resolution_rate": 0.3634844264370727,
+      "far_from_value_symbol_share": 0.03528997003349198,
+      "far_from_value_symbols": 1001,
+      "machinery_symbol_share": 0.5944297549797285,
+      "machinery_symbols": 16861,
+      "max_recursive_depth": 2,
+      "max_value_distance": 12,
+      "meta_symbol_share": 0.0,
+      "meta_symbols": 0,
+      "probable_relationships": 17804,
+      "product_reachable_symbols": 17703,
+      "product_symbols": 9547,
+      "relationship_count": 59235,
+      "resolution_rate": 0.6640499704566557,
+      "resolved_relationships": 21531,
+      "scaffolding_symbol_ratio": 1.7661045354561642,
+      "semantic_ouroboros_index": 6.001939009342499,
+      "symbol_count": 28365,
+      "unresolved_relationships": 19900
+    },
+    "repository": "permissionlesstech/bitchat",
+    "sha": "1f59e814f90c3f489f48d68262cb1bf640bf6181"
+  },
+  {
+    "analyzer": {
+      "baseline": "0.1.0",
+      "canonical_topology": "exact-edges-only",
+      "name": "Ouroboros",
+      "parser": "tree-sitter-language-pack==1.13.3",
+      "semantic_index_formula": "same weights as 0.1 applied to symbol audit/meta share + exact graph distance/depth",
+      "version": "0.2.0-semantic"
+    },
+    "deepest_chains": [
+      {
+        "canonical_resolution": "exact",
+        "categories": ["core-product", "verification", "verification"],
+        "depth": 2,
+        "relationships": ["calls", "calls"],
+        "symbol_ids": ["packages/vscode-extension/src/privacy/sanitizer.ts::sanitize@16", "src/lib/jobs/validation.ts::sanitizeDescription@67", "src/lib/jobs/validation.ts::validateListingFields@76"]
+      },
+      {
+        "canonical_resolution": "exact",
+        "categories": ["core-product", "verification", "verification"],
+        "depth": 2,
+        "relationships": ["calls", "calls"],
+        "symbol_ids": ["packages/vscode-extension/src/privacy/sanitizer.ts::sanitize@16", "src/lib/jobs/validation.ts::sanitizeHowToApply@71", "src/lib/jobs/validation.ts::validateListingFields@76"]
+      },
+      {
+        "canonical_resolution": "exact",
+        "categories": ["user-surface", "process-machinery", "process-machinery"],
+        "depth": 2,
+        "relationships": ["calls", "calls"],
+        "symbol_ids": ["src/lib/email-template.ts::buildButton@78", "src/lib/notification-senders/job-public-digest.ts::sendJobPublicDigestNotification@24", "src/app/api/cron/jobs-public-digest/route.ts::GET@12"]
+      }
+    ],
+    "diagnostics_count": 436,
+    "metrics": {
+      "audit_symbol_share": 0.0,
+      "audit_symbols": 0,
+      "direct_product_symbol_share": 0.9621095750128008,
+      "exact_resolution_rate": 0.15237220873067583,
+      "far_from_value_symbol_share": 0.0010240655401945725,
+      "far_from_value_symbols": 2,
+      "machinery_symbol_share": 0.017409114183307733,
+      "machinery_symbols": 34,
+      "max_recursive_depth": 2,
+      "max_value_distance": 5,
+      "meta_symbol_share": 0.0,
+      "meta_symbols": 0,
+      "probable_relationships": 6144,
+      "product_reachable_symbols": 1922,
+      "product_symbols": 1879,
+      "relationship_count": 33766,
+      "resolution_rate": 0.3343303915180951,
+      "resolved_relationships": 5145,
+      "scaffolding_symbol_ratio": 0.018094731240021287,
+      "semantic_ouroboros_index": 5.020481310803891,
+      "symbol_count": 1953,
+      "unresolved_relationships": 22477
+    },
+    "repository": "srizzon/git-city",
+    "sha": "bb4d9102af6126970bbce1fb3e20d818df4a535f"
+  },
+  {
+    "analyzer": {
+      "baseline": "0.1.0",
+      "canonical_topology": "exact-edges-only",
+      "name": "Ouroboros",
+      "parser": "tree-sitter-language-pack==1.13.3",
+      "semantic_index_formula": "same weights as 0.1 applied to symbol audit/meta share + exact graph distance/depth",
+      "version": "0.2.0-semantic"
+    },
+    "deepest_chains": [],
+    "diagnostics_count": 13,
+    "metrics": {
+      "audit_symbol_share": 0.0,
+      "audit_symbols": 0,
+      "direct_product_symbol_share": 0.7837837837837838,
+      "exact_resolution_rate": 0.0357653791130186,
+      "far_from_value_symbol_share": 0.0,
+      "far_from_value_symbols": 0,
+      "machinery_symbol_share": 0.21621621621621623,
+      "machinery_symbols": 8,
+      "max_recursive_depth": 0,
+      "max_value_distance": 0,
+      "meta_symbol_share": 0.0,
+      "meta_symbols": 0,
+      "probable_relationships": 41,
+      "product_reachable_symbols": 29,
+      "product_symbols": 29,
+      "relationship_count": 699,
+      "resolution_rate": 0.0944206008583691,
+      "resolved_relationships": 25,
+      "scaffolding_symbol_ratio": 0.27586206896551724,
+      "semantic_ouroboros_index": 0.0,
+      "symbol_count": 37,
+      "unresolved_relationships": 633
+    },
+    "repository": "rdumasia303/deepseek_ocr_app",
+    "sha": "3dac0741b18afc934c063e8528e7576f4d63efe5"
+  }
+]
