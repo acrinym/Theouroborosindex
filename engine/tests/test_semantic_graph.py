@@ -1,6 +1,8 @@
 from ouroboros.model import Category, Component
 from ouroboros.scanner import ScannedFile
 from ouroboros.semantic import EdgeKind, Resolution, SymbolKind, build_semantic_graph
+from ouroboros.semantic.graph import finalize_graph
+from ouroboros.semantic.model import SemanticEdge, SemanticGraph, Symbol
 
 
 def scanned(path: str, text: str, category: Category, language: str = "python") -> ScannedFile:
@@ -50,6 +52,35 @@ def record_validation():
     assert graph.metrics is not None
     assert graph.metrics.symbol_count >= 5
     assert graph.metrics.max_recursive_depth >= 2
+    assert graph.metrics.exact_resolution_rate <= graph.metrics.resolution_rate
+    assert graph.chains[0].relationships
+    assert graph.chains[0].to_dict()["canonical_resolution"] == "exact"
+
+
+def test_probable_match_cannot_create_canonical_distance_or_depth():
+    product = Symbol(
+        id="app.py::run@1", path="app.py", language="python", kind=SymbolKind.FUNCTION,
+        name="run", qualified_name="run", start_line=1, end_line=1, category=Category.CORE_PRODUCT,
+    )
+    verifier = Symbol(
+        id="verify.py::category@1", path="verify.py", language="python", kind=SymbolKind.FUNCTION,
+        name="category", qualified_name="category", start_line=1, end_line=1, category=Category.VERIFICATION,
+    )
+    graph = SemanticGraph(
+        symbols={product.id: product, verifier.id: verifier},
+        edges=[SemanticEdge(
+            source_id=verifier.id, kind=EdgeKind.CALLS, target_name="run", target_id=product.id,
+            resolution=Resolution.PROBABLE, evidence="ambiguous same-name candidate",
+        )],
+    )
+    finalize_graph(graph)
+    assert product.value_distance == 0
+    assert verifier.value_distance is None
+    assert graph.chains == []
+    assert graph.metrics is not None
+    assert graph.metrics.max_recursive_depth == 0
+    assert graph.metrics.exact_resolution_rate == 0.0
+    assert graph.metrics.resolution_rate == 1.0
 
 
 def test_unresolved_dynamic_target_is_retained_not_invented():
