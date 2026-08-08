@@ -17,6 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Materialize frozen 0.1 runtime
+        run: |
+          cat engine/parts/classify.py.part0 engine/parts/classify.py.part1 > engine/src/ouroboros/classify.py
+          cat engine/parts/graph.py.part0 engine/parts/graph.py.part1 > engine/src/ouroboros/graph.py
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
