@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
@@ -20,6 +21,7 @@ _GROUP_WEIGHTS = {
     "far_from_value": 0.10,
     "exact_coverage": 0.05,
 }
+_VERSION_RE = re.compile(r"^(\d+)\.(\d+)(?:\.|$)")
 
 
 class NeighborError(ValueError):
@@ -42,24 +44,31 @@ def _optional_number(value: Any) -> float | None:
     return None
 
 
-def _share_map(counts: Any) -> dict[str, float]:
+def _clean_counts(counts: Any) -> dict[str, float]:
     if not isinstance(counts, dict):
         counts = {}
-    clean = {category: max(0.0, _number(counts.get(category))) for category in CATEGORY_ORDER}
+    return {category: max(0.0, _number(counts.get(category))) for category in CATEGORY_ORDER}
+
+
+def _share_map(counts: Any) -> tuple[dict[str, float], float]:
+    clean = _clean_counts(counts)
     total = sum(clean.values())
     if total <= 0:
-        return {category: 0.0 for category in CATEGORY_ORDER}
-    return {category: clean[category] / total for category in CATEGORY_ORDER}
+        return ({category: 0.0 for category in CATEGORY_ORDER}, 0.0)
+    return ({category: clean[category] / total for category in CATEGORY_ORDER}, total)
 
 
 def _semantic_model_for_version(version: str | None) -> str | None:
     if not version:
         return None
-    try:
-        major, minor, *_ = [int(part) for part in version.split(".")]
-    except ValueError:
+    match = _VERSION_RE.match(version)
+    if not match:
         return None
-    if major == 0 and minor >= 3:
+    major = int(match.group(1))
+    minor = int(match.group(2))
+    # This compatibility declaration is deliberately closed-ended. A future
+    # release must explicitly opt in if its measurement rules remain equivalent.
+    if major == 0 and 3 <= minor <= 7:
         return MEASUREMENT_MODEL
     return None
 
@@ -93,6 +102,8 @@ def fingerprint_from_index_record(record: dict[str, Any]) -> dict[str, Any]:
     relationship_count = int(max(0, _number(semantic.get("relationship_count"))))
     exact_coverage = _optional_number(semantic.get("exact_resolution_rate")) if relationship_count else None
     model = measurement.get("measurement_model") or _semantic_model_for_version(version)
+    code_shares, code_total = _share_map(measurement.get("category_code_lines"))
+    symbol_shares, symbol_total = _share_map(measurement.get("category_symbol_counts"))
 
     return {
         "repository_name": repository_name,
@@ -101,8 +112,10 @@ def fingerprint_from_index_record(record: dict[str, Any]) -> dict[str, Any]:
         "analyzer_source_revision": analyzer.get("source_revision"),
         "canonical": bool(analyzer.get("canonical", True)),
         "measurement_model": model,
-        "code_category_shares": _share_map(measurement.get("category_code_lines")),
-        "symbol_category_shares": _share_map(measurement.get("category_symbol_counts")),
+        "code_category_shares": code_shares,
+        "code_line_total": int(code_total),
+        "symbol_category_shares": symbol_shares,
+        "symbol_count": int(symbol_total),
         "recursive_depth": int(max(0, _number(semantic.get("max_recursive_depth")))),
         "semantic_index": min(100.0, max(0.0, _number(semantic.get("semantic_ouroboros_index")))),
         "far_from_value_symbol_share": min(1.0, max(0.0, _number(semantic.get("far_from_value_symbol_share")))),
@@ -138,6 +151,8 @@ def fingerprint_from_scan(record: dict[str, Any]) -> dict[str, Any]:
     relationship_count = int(max(0, _number(semantic_metrics.get("relationship_count"))))
     exact_coverage = _optional_number(semantic_metrics.get("exact_resolution_rate")) if relationship_count else None
     model = scan.get("measurement_model") or _semantic_model_for_version(version)
+    code_shares, code_total = _share_map(baseline_metrics.get("category_code_lines"))
+    symbol_shares, symbol_total = _share_map(symbol_counts)
 
     return {
         "repository_name": repository_name,
@@ -146,8 +161,10 @@ def fingerprint_from_scan(record: dict[str, Any]) -> dict[str, Any]:
         "analyzer_source_revision": analyzer.get("source_sha") or analyzer.get("source_revision"),
         "canonical": bool(scan.get("canonical", analyzer.get("canonical", False))),
         "measurement_model": model,
-        "code_category_shares": _share_map(baseline_metrics.get("category_code_lines")),
-        "symbol_category_shares": _share_map(symbol_counts),
+        "code_category_shares": code_shares,
+        "code_line_total": int(code_total),
+        "symbol_category_shares": symbol_shares,
+        "symbol_count": int(symbol_total),
         "recursive_depth": int(max(0, _number(semantic_metrics.get("max_recursive_depth")))),
         "semantic_index": min(100.0, max(0.0, _number(semantic_metrics.get("semantic_ouroboros_index")))),
         "far_from_value_symbol_share": min(1.0, max(0.0, _number(semantic_metrics.get("far_from_value_symbol_share")))),
@@ -231,28 +248,33 @@ def _depth_value(depth: int) -> float:
 
 
 def structural_distance(query: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
-    components: dict[str, dict[str, float]] = {
-        "code_composition": {
+    components: dict[str, dict[str, float]] = {}
+    if int(query.get("code_line_total") or 0) > 0 and int(candidate.get("code_line_total") or 0) > 0:
+        components["code_composition"] = {
             "distance": _composition_distance(query["code_category_shares"], candidate["code_category_shares"]),
             "weight": _GROUP_WEIGHTS["code_composition"],
-        },
-        "symbol_composition": {
+        }
+    if int(query.get("symbol_count") or 0) > 0 and int(candidate.get("symbol_count") or 0) > 0:
+        components["symbol_composition"] = {
             "distance": _composition_distance(query["symbol_category_shares"], candidate["symbol_category_shares"]),
             "weight": _GROUP_WEIGHTS["symbol_composition"],
-        },
-        "recursive_depth": {
-            "distance": abs(_depth_value(query["recursive_depth"]) - _depth_value(candidate["recursive_depth"])),
-            "weight": _GROUP_WEIGHTS["recursive_depth"],
-        },
-        "semantic_index": {
-            "distance": abs(query["semantic_index"] - candidate["semantic_index"]) / 100.0,
-            "weight": _GROUP_WEIGHTS["semantic_index"],
-        },
-        "far_from_value": {
-            "distance": abs(query["far_from_value_symbol_share"] - candidate["far_from_value_symbol_share"]),
-            "weight": _GROUP_WEIGHTS["far_from_value"],
-        },
-    }
+        }
+    components.update(
+        {
+            "recursive_depth": {
+                "distance": abs(_depth_value(query["recursive_depth"]) - _depth_value(candidate["recursive_depth"])),
+                "weight": _GROUP_WEIGHTS["recursive_depth"],
+            },
+            "semantic_index": {
+                "distance": abs(query["semantic_index"] - candidate["semantic_index"]) / 100.0,
+                "weight": _GROUP_WEIGHTS["semantic_index"],
+            },
+            "far_from_value": {
+                "distance": abs(query["far_from_value_symbol_share"] - candidate["far_from_value_symbol_share"]),
+                "weight": _GROUP_WEIGHTS["far_from_value"],
+            },
+        }
+    )
     if query.get("exact_coverage") is not None and candidate.get("exact_coverage") is not None:
         components["exact_coverage"] = {
             "distance": abs(float(query["exact_coverage"]) - float(candidate["exact_coverage"])),
@@ -284,17 +306,21 @@ def _category_differences(query: dict[str, Any], candidate: dict[str, Any], *, l
 
 def _explanation(query: dict[str, Any], candidate: dict[str, Any], distance: dict[str, Any]) -> list[str]:
     components = distance["components"]
-    code = components["code_composition"]["distance"]
-    symbol = components["symbol_composition"]["distance"]
-    lines = [
-        f"Code-purpose composition distance is {code:.3f}; symbol-role composition distance is {symbol:.3f}.",
-    ]
+    lines: list[str] = []
+    code = components.get("code_composition")
+    symbols = components.get("symbol_composition")
+    if code is not None:
+        lines.append(f"Code-purpose composition distance is {code['distance']:.3f}.")
+    else:
+        lines.append("Code-purpose composition was unavailable for at least one scan and was excluded from distance weighting.")
+    if symbols is not None:
+        lines.append(f"Symbol-role composition distance is {symbols['distance']:.3f}.")
+    else:
+        lines.append("Symbol-role composition was unavailable for at least one scan and was excluded from distance weighting.")
     if query["recursive_depth"] == candidate["recursive_depth"]:
         lines.append(f"Both scans have exact recursive depth {query['recursive_depth']}.")
     else:
-        lines.append(
-            f"Exact recursive depth differs: {query['recursive_depth']} versus {candidate['recursive_depth']}."
-        )
+        lines.append(f"Exact recursive depth differs: {query['recursive_depth']} versus {candidate['recursive_depth']}.")
     index_delta = candidate["semantic_index"] - query["semantic_index"]
     lines.append(f"Semantic Index differs by {index_delta:+.1f} points; this is structural context, not a quality judgment.")
     if query.get("exact_coverage") is None or candidate.get("exact_coverage") is None:
@@ -312,7 +338,7 @@ def find_neighbors(
 ) -> dict[str, Any]:
     if limit < 1:
         raise NeighborError("limit must be at least 1")
-    candidates = []
+    candidate_records: list[dict[str, Any]] = []
     excluded = Counter()
     query_name = str(query.get("repository_name") or "")
     query_sha = query.get("repository_sha")
@@ -325,11 +351,13 @@ def find_neighbors(
         except NeighborError:
             excluded["invalid_measurement"] += 1
             continue
-        if not include_same_repository and candidate["repository_name"].lower() == query_name.lower():
-            excluded["same_repository"] += 1
-            continue
-        if candidate["repository_name"].lower() == query_name.lower() and candidate.get("repository_sha") == query_sha:
+        same_repository = candidate["repository_name"].lower() == query_name.lower()
+        same_identity = same_repository and candidate.get("repository_sha") == query_sha
+        if same_identity:
             excluded["same_identity"] += 1
+            continue
+        if not include_same_repository and same_repository:
+            excluded["same_repository"] += 1
             continue
         same_model = bool(query_model and candidate.get("measurement_model") == query_model)
         same_canonical = candidate.get("canonical") == query_canonical
@@ -338,7 +366,7 @@ def find_neighbors(
             continue
 
         distance = structural_distance(query, candidate)
-        candidates.append(
+        candidate_records.append(
             {
                 "repository_name": candidate["repository_name"],
                 "repository_sha": candidate.get("repository_sha"),
@@ -354,6 +382,13 @@ def find_neighbors(
             }
         )
 
+    candidate_records.sort(key=lambda row: (row["distance"], row["repository_name"], row.get("repository_sha") or ""))
+    best_by_repository: dict[str, dict[str, Any]] = {}
+    for candidate in candidate_records:
+        key = candidate["repository_name"].lower()
+        if key not in best_by_repository:
+            best_by_repository[key] = candidate
+    candidates = list(best_by_repository.values())
     candidates.sort(key=lambda row: (row["distance"], row["repository_name"], row.get("repository_sha") or ""))
     result = candidates[:limit]
     return {
@@ -362,8 +397,10 @@ def find_neighbors(
         "query": query,
         "neighbors": result,
         "cohort": {
-            "records_seen": sum(excluded.values()) + len(candidates),
+            "records_seen": sum(excluded.values()) + len(candidate_records),
+            "eligible_records": len(candidate_records),
             "eligible": len(candidates),
+            "eligible_repositories": len(candidates),
             "returned": len(result),
             "excluded": dict(sorted(excluded.items())),
             "cross_model_enabled": cross_model,
@@ -373,6 +410,6 @@ def find_neighbors(
             "range": [0.0, 1.0],
             "meaning": "lower means more similar repository anatomy; this is not a quality score",
             "group_weights": dict(_GROUP_WEIGHTS),
-            "missing_exact_coverage": "excluded and remaining weights are renormalized",
+            "missing_evidence": "unavailable dimensions are excluded and remaining weights are renormalized",
         },
     }
