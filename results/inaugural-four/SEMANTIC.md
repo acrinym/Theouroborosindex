@@ -1,48 +1,86 @@
 # Inaugural semantic benchmark
 
-Ouroboros 0.2 crawls source structure beneath the file/LOC composition baseline. It parses source statically, extracts symbols and relationships, resolves calls/imports/inheritance where possible, and computes Distance From Value and recursive machinery depth from the resulting graph.
+The semantic benchmark asks a different question from the original file/LOC baseline: **what roles do the actual symbols play, and what exact static relationships connect product behavior to surrounding machinery?**
 
-Canonical hardened run: `31236501947` at analyzer head `772090ff4f6470732ab7acc244b57dd18942d7e8`.
+Ouroboros 0.3 is the current semantic model. The earlier 0.2 results remain documented below as historical output because 0.3 intentionally changed the role and trust model.
 
-Canonical topology uses **exactly resolved edges only**. Probable and unresolved relationships remain visible as coverage/evidence but cannot create product reachability, Distance From Value, recursive depth, or the semantic Ouroboros Index. A bare same-name match across programming languages is never promoted to exact; cross-language canonical edges require explicit dependency evidence or a language adapter that can prove the relationship.
+## Canonical 0.3 run
 
-## Semantic results
+- analyzer: `Ouroboros 0.3.0`
+- analyzer source: `83571940e8d09a76c9869ec4d5a46d82cb012d4f`
+- GitHub Actions run: `31360961575`
+- aggregate artifact: `9052391519`
+- aggregate digest: `sha256:4949926f98a7b9f20bde2d278e85c632f60dfa7b24ea61fb8b1097d5710f553e`
+- traversal truncation: **none of the four repositories**
+- target code executed: **never**
+- target-authored `.ouroboros.json`: **ignored by canonical mode**
 
-| Repository | Symbols | Product symbols | Machinery symbols | Scaffold/Product | Exact links | Resolvable links | Far >=4 | Depth | Semantic Index |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `ryokun6/ryos` | 7,220 | 74.9% | 20.3% | 0.27:1 | 21.5% | 47.3% | 1.1% | 3 | **7.9** |
-| `permissionlesstech/bitchat` | 28,365 | 33.7% | 59.4% | 1.77:1 | 36.3% | 66.4% | 3.5% | 2 | **6.0** |
-| `srizzon/git-city` | 1,953 | 96.2% | 1.7% | 0.02:1 | 15.2% | 33.4% | 0.1% | 2 | **5.0** |
-| `rdumasia303/deepseek_ocr_app` | 37 | 78.4% | 21.6% | 0.28:1 | 3.6% | 9.4% | 0.0% | 0 | **0.0** |
+The compact reproducible record is in [`semantic-index-0.3.json`](semantic-index-0.3.json).
 
-## Baseline versus semantic view
+### 0.3 results
 
-The 0.1 baseline measures code-line composition and file-level topology. The 0.2 semantic view measures symbol composition and exactly resolved source topology. They answer related but different questions, so both remain published.
+| Repository | Symbols | Product | Machinery | Scaffold/Product | Audit | Meta | Exact | Resolvable | Far recursive machinery | Depth | Semantic Index |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `ryokun6/ryos` | 7,662 | 74.2% | 17.4% | 0.23:1 | 0.30% | 0% | 6.3% | 20.9% | 0.08% | 1 | **2.64** |
+| `permissionlesstech/bitchat` | 28,365 | 31.9% | **56.9%** | **1.78:1** | 0% | 0% | 17.2% | 36.4% | 0.66% | 1 | **2.63** |
+| `srizzon/git-city` | 2,403 | **94.2%** | 0.8% | 0.01:1 | 0% | 0% | 6.7% | 13.2% | 0% | 1 | **2.50** |
+| `rdumasia303/deepseek_ocr_app` | 37 | 78.4% | 21.6% | 0.28:1 | 0% | 0% | 2.2% | 2.2% | 0% | 0 | **0.00** |
 
-| Repository | 0.1 product LOC | 0.2 product symbols | 0.1 tooling LOC | 0.2 machinery symbols | 0.1 depth | 0.2 exact depth | 0.1 Index | 0.2 semantic Index |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `ryokun6/ryos` | 75.6% | 74.9% | 22.0% | 20.3% | 2 | 3 | 5.1 | 7.9 |
-| `permissionlesstech/bitchat` | 41.0% | 33.7% | 52.7% | 59.4% | 1 | 2 | 2.9 | 6.0 |
-| `srizzon/git-city` | 55.4% | 96.2% | 34.6% | 1.7% | 2 | 2 | 5.0 | 5.0 |
-| `rdumasia303/deepseek_ocr_app` | 95.4% | 78.4% | 4.6% | 21.6% | 0 | 0 | 0.0 | 0.0 |
+### The important result
 
-## What changed
+**Tooling-heavy is not the same thing as Ouroboros-heavy.**
 
-- `srizzon/git-city` is the clearest demonstration of why the graph exists: 55.4% direct-product LOC in the baseline becomes 96.2% direct-product symbols, with only 1.7% machinery symbols. Repository acreage is not the same thing as architectural machinery.
-- `permissionlesstech/bitchat` moves the other direction: 33.7% product symbols versus 59.4% machinery symbols, with a 1.77:1 symbol scaffolding ratio. Its exact graph reaches Distance From Value 12, while canonical recursive machinery depth is 2.
-- `ryokun6/ryos` remains strongly product-oriented at 74.9% product symbols and has the cohort's highest semantic Index, 7.9, driven by exact depth 3 plus a small amount of audit/far-from-value structure.
-- `rdumasia303/deepseek_ocr_app` remains semantic Index 0.0, but its exact relationship coverage is only 3.6% (9.4% exact+probable). That score is accompanied by an explicit low-coverage signal rather than being presented as a complete reconstruction of runtime structure.
+Bitchat is the strongest demonstration. More than half its symbols are surrounding machinery and its machinery/product ratio is `1.78:1`, largely because it has an enormous test surface. Yet it has no audit/meta symbol share, only `0.66%` far recursive machinery, exact recursive depth `1`, and a semantic Index of only `2.63`.
 
-## Hardening discovered during review
+That is deliberate. Tests still count in **machinery share** and **scaffolding ratio**, because they really are repository machinery. Ordinary tests do not automatically count as **far recursive machinery**, because Distance From Value is intended to detect chains such as validator → telemetry → analyzer → dashboard-about-the-analyzer, not punish a repository merely for having a large test suite.
 
-The first semantic pass exposed an ambiguous common-name match that could create a false deep Bitchat chain. Canonical topology was changed to exact-only and a regression test was added. OpenHands review then prompted a second edge-case check: a unique same-named symbol in a *different language* could still be promoted to exact. The resolver now treats bare cross-language name matches as probable only. The hardened run removed 21 false-exact Bitchat relationships and 11 far-from-value symbols, moving its precise semantic Index from `6.001939...` to `5.994183...` while leaving the displayed 6.0 rounded score intact.
+Git City shows the other side: repository acreage and architectural machinery are different things. Its 0.1 LOC baseline looked comparatively tooling-heavy, while 0.3 finds `94.2%` product symbols and only `0.8%` machinery symbols.
 
-The scoring weights are named public constants and stay fixed for an analyzer version; they are not per-repository tuning knobs.
+## What 0.3 fixed
 
-## Current interpretation boundary
+The 0.2 semantic pass was useful precisely because it found its own weak points. ISOupdater then made the defects concrete.
 
-Version 0.2 has **symbol-level structure** but seeds each symbol's composition category from its containing file's 0.1 classification. Mixed-purpose files are therefore not yet independently classified method-by-method. This is deliberate and visible: the graph foundation is real, while symbol-local role classification remains a separate next refinement.
+### False exact relationships
 
-Dynamic dispatch, reflection, dependency injection, macros, generated code, and other runtime wiring can remain probable or unresolved until a deeper language adapter can prove the edge. Ouroboros does not upgrade uncertainty into a canonical relationship.
+A call such as `Path(path).resolve()` could accidentally bind to an unrelated local function named `resolve` merely because the name was unique. 0.3 preserves qualified Python import evidence (`pathlib.Path.resolve`, `physics.resolve`) and treats a bare cross-file same-name candidate as **probable**, not exact.
 
-Target repository code is never executed by the Index.
+File dependency data also no longer grants exactness by itself: the actual import target must match the candidate module.
+
+### Mixed-purpose files
+
+0.2 seeded every symbol role from its containing file. A module containing checksum verification, configuration, history, archive handling, and library housekeeping could therefore turn every method into `verification`.
+
+0.3 uses asymmetric symbol-local refinement. Dedicated machinery paths remain authoritative. Mixed machinery-seeded files keep machinery roles only where local evidence supports them; unrelated symbols fall back to product or essential support. Product/support symbols do not get promoted into machinery merely because their business-domain vocabulary contains words such as `build`, `pipeline`, `receipt`, `verify`, `metrics`, or `bootstrap`.
+
+### Recursive distance
+
+The 0.3 semantic Index's far-distance term counts **recursive machinery categories**—observability, verification, audit/provenance, process machinery, and meta-machinery—rather than ordinary testing or generic developer tooling. Test/tooling volume remains visible in machinery share and scaffolding ratio.
+
+### Safety and reproducibility
+
+- canonical topology uses **EXACT relationships only**;
+- probable/unresolved relationships remain visible as coverage evidence;
+- recursive traversal has an explicit expansion budget and reports truncation;
+- parser/adapter failure is isolated per file;
+- JSON output is strict (`null`, never non-standard `Infinity`);
+- canonical public scans ignore repository-authored classification overrides;
+- target repository code is never executed.
+
+## Historical 0.2 results
+
+These numbers are preserved for provenance, not mixed with 0.3 as if they used the same semantics.
+
+| Repository | 0.2 Product symbols | 0.2 Machinery symbols | 0.2 Depth | 0.2 Semantic Index |
+|---|---:|---:|---:|---:|
+| `ryokun6/ryos` | 74.9% | 20.3% | 3 | 7.9 |
+| `permissionlesstech/bitchat` | 33.7% | 59.4% | 2 | 6.0 |
+| `srizzon/git-city` | 96.2% | 1.7% | 2 | 5.0 |
+| `rdumasia303/deepseek_ocr_app` | 78.4% | 21.6% | 0 | 0.0 |
+
+0.2 inherited symbol roles from whole-file classification and still allowed several weak relationship/role signals that 0.3 deliberately removed. The version change is therefore meaningful, not cosmetic.
+
+## One self-bite, then stop
+
+Ouroboros 0.3 analyzed The Ouroboros Index itself exactly once during development. That run exposed additional domain-vocabulary collisions and directly informed the final role model. The self-analysis job was then removed from recurring CI.
+
+See [`../self-bite-0.3.md`](../self-bite-0.3.md). The snake bit its tail; it did not consume it. 🐍

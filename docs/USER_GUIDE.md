@@ -59,21 +59,45 @@ This answers **what the code is structurally doing** at the level of functions, 
 - **Recursive depth** — the deepest exact machinery chain leading away from product value.
 - **Semantic Index** — the same basic Ouroboros idea applied to symbol roles and exact topology.
 
-## 3. Do not treat the Index like a grade
+## 3. Two axes, not one grade
 
-A score of 8 is not automatically worse than a score of 3.
+This is the most important way to read Ouroboros.
 
-A repository can legitimately have a lot of tests. A safety-sensitive updater can legitimately verify checksums. A compiler can legitimately contain substantial tooling. The useful question is whether the surrounding machinery is proportionate to the thing being built and whether machinery has begun to exist mostly for other machinery.
+**Machinery share / Scaffold-to-product** asks:
+
+> How much stuff surrounds the product?
+
+**Recursive depth / Ouroboros Index** asks:
+
+> How much of that surrounding stuff has become machinery around machinery?
+
+A repository can legitimately have a huge test suite and therefore a high machinery share without having deep audit/meta recursion. That is not a contradiction—it is the distinction the tool is designed to reveal.
+
+The inaugural 0.3 benchmark demonstrates this directly: Bitchat has **56.9% machinery symbols** and a **1.78:1** machinery/product ratio, yet its exact recursive depth is only **1** and its semantic Ouroboros Index is only **2.63**.
+
+A score of 8 is not automatically worse than a score of 3. A safety-sensitive updater can legitimately verify checksums. A compiler can legitimately contain substantial tooling. The useful question is whether the surrounding machinery is proportionate to the thing being built and whether machinery has begun to exist mostly for other machinery.
 
 A useful reading order is:
 
 1. Look at **Product**, **Product + support**, and **Scaffold / product**.
 2. Compare **machinery share** with **audit/meta share**. A test-heavy repo is different from an audit-heavy repo.
-3. Look at **recursive depth**.
+3. Look at **recursive depth** and **far recursive machinery**.
 4. Inspect the exact chains before deciding anything needs to be removed.
 5. Check **exact relationship coverage**. Low coverage means the semantic picture is incomplete, not that the repository is clean or dirty.
 
-## 4. What the categories mean
+## 4. What “far from value” means
+
+In the semantic Index, the far-distance penalty is about **recursive machinery**, not every support symbol that happens to be several graph edges away.
+
+Think of a chain like:
+
+`player movement → save serializer → save validator → validator telemetry → telemetry analyzer → dashboard verifying telemetry completeness`
+
+As machinery moves farther from direct product value and begins supporting or checking other machinery, the signal grows.
+
+Ordinary tests and generic developer tooling still count in **machinery share** and **scaffolding ratio**, but they do not automatically inflate the far-recursive-distance penalty merely for being graph-distant.
+
+## 5. What the categories mean
 
 | Category | Plain-English meaning |
 |---|---|
@@ -90,9 +114,13 @@ A useful reading order is:
 | Documentation | Readmes, guides, docs |
 | Unknown | Supported text/code that does not have enough evidence for a useful role |
 
-Mixed-purpose files are handled more carefully in 0.3. A file containing an integrity helper no longer automatically turns every unrelated method in that file into verification code; strong symbol-local evidence can assign different roles inside the same file.
+### Words are not destiny
 
-## 5. Save a full result
+A chat product may have a `readReceipt`. A build application may have a `buildPipeline`. A protocol may `verifyPeer`. Ouroboros 0.3 does not automatically call those symbols audit/process/verification machinery just because their product vocabulary happens to use those words.
+
+Dedicated paths such as tests, telemetry/logging, audit/provenance, workflows, validators, and tooling provide stronger architectural context. Mixed-purpose files can be refined symbol by symbol.
+
+## 6. Save a full result
 
 ```bash
 ouroboros /path/to/repo --json result.json
@@ -102,7 +130,7 @@ The JSON contains the file-level analysis, semantic graph, relationship resoluti
 
 The writer uses strict JSON: undefined ratios are emitted as `null`, never non-standard `Infinity`.
 
-## 6. Optional local configuration
+## 7. Optional local configuration
 
 For your own scans, you can place `.ouroboros.json` at the repository root when Ouroboros needs project-specific context.
 
@@ -125,7 +153,7 @@ Repository-provided configuration is useful for a developer analyzing their own 
 ouroboros /path/to/repo --canonical
 ```
 
-## 7. EXACT, PROBABLE, and UNRESOLVED
+## 8. EXACT, PROBABLE, and UNRESOLVED
 
 **EXACT** means Ouroboros has structural evidence strong enough to let that relationship affect Distance From Value and recursive depth.
 
@@ -137,23 +165,24 @@ Examples include a same-file method call or a qualified imported Python call suc
 
 Ouroboros would rather leave an edge unresolved than invent a dramatic audit chain from a coincidental function name.
 
-## 8. If the score looks surprising
+## 9. If the score looks surprising
 
 First check:
 
 - **Role mix:** Is the repo mostly tests or verification rather than recursive audit machinery?
 - **Exact coverage:** Is the semantic graph seeing enough of the language/framework to support a strong conclusion?
 - **Exact chains:** Do the reported chains make architectural sense when you read the named functions/files?
+- **Traversal note:** Did the scan report that its recursive-chain safety budget was reached? If so, observed depth may be understated.
 
 If a chain is clearly false, that is a classifier/resolver bug worth fixing in Ouroboros. Do not “fix” the target repository merely to make the score prettier.
 
-## 9. Supported source languages
+## 10. Supported source languages
 
 The scanner recognizes Python, JavaScript, JSX, TypeScript, TSX, C#, F#, Java, Kotlin, Go, Rust, Ruby, PHP, C, C++, Swift, Lua, PowerShell, shell/Bash, SQL, HTML, CSS/SCSS, Markdown/RST, YAML, TOML, JSON, and XML.
 
 The semantic graph currently has direct AST/Tree-sitter adapters for Python, JavaScript, TypeScript, TSX, C#, F#, Java, Kotlin, Go, Rust, Ruby, PHP, C, C++, Swift, Lua, PowerShell, and shell/Bash. Other recognized files still contribute to the file-level view.
 
-## 10. What Ouroboros deliberately does not do
+## 11. What Ouroboros deliberately does not do
 
 Ouroboros is not a security scanner, style linter, compliance framework, AI-authorship detector, or generic “code quality” score.
 
