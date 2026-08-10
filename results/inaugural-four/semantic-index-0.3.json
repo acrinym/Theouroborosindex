@@ -1,23 +1,23 @@
 {
   "analyzer": "Ouroboros 0.3.0",
-  "artifact_digest": "sha256:4949926f98a7b9f20bde2d278e85c632f60dfa7b24ea61fb8b1097d5710f553e",
-  "artifact_id": 9052391519,
+  "artifact_digest": "sha256:39884b65e21b3fb296b784cdd5417ed6923260efc73c59966729282efd63037b",
+  "artifact_id": 9061692875,
   "records": [
     {
-      "analyzer_source_head": "83571940e8d09a76c9869ec4d5a46d82cb012d4f",
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
       "analyzer_version": "0.3.0",
       "metrics": {
         "audit_symbol_share": 0.003001827199164709,
-        "chain_expansions": 4395,
+        "chain_expansions": 4413,
         "chain_truncated": false,
-        "direct_product_symbol_share": 0.7417123466457843,
+        "direct_product_symbol_share": 0.7411902897415819,
         "exact_resolution_rate": 0.0631133182537118,
         "far_from_value_symbol_share": 0.0007830853563038371,
         "machinery_symbol_share": 0.17397546332550248,
         "max_recursive_depth": 1,
         "meta_symbol_share": 0.0,
         "resolution_rate": 0.20896613887991292,
-        "scaffolding_symbol_ratio": 0.23455921168396973,
+        "scaffolding_symbol_ratio": 0.23472442331396373,
         "semantic_ouroboros_index": 2.635734795092665,
         "symbol_count": 7662
       },
@@ -25,11 +25,11 @@
       "repository_sha": "c599b3102900f20f66c48dff2b4562d07ddd52cf"
     },
     {
-      "analyzer_source_head": "83571940e8d09a76c9869ec4d5a46d82cb012d4f",
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
       "analyzer_version": "0.3.0",
       "metrics": {
         "audit_symbol_share": 0.0,
-        "chain_expansions": 3840,
+        "chain_expansions": 3841,
         "chain_truncated": false,
         "direct_product_symbol_share": 0.3189494094835184,
         "exact_resolution_rate": 0.1716215075546552,
@@ -46,7 +46,7 @@
       "repository_sha": "1f59e814f90c3f489f48d68262cb1bf640bf6181"
     },
     {
-      "analyzer_source_head": "83571940e8d09a76c9869ec4d5a46d82cb012d4f",
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
       "analyzer_version": "0.3.0",
       "metrics": {
         "audit_symbol_share": 0.0,
@@ -67,7 +67,7 @@
       "repository_sha": "bb4d9102af6126970bbce1fb3e20d818df4a535f"
     },
     {
-      "analyzer_source_head": "83571940e8d09a76c9869ec4d5a46d82cb012d4f",
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
       "analyzer_version": "0.3.0",
       "metrics": {
         "audit_symbol_share": 0.0,
@@ -89,5 +89,5 @@
     }
   ],
   "schema": "ouroboros-semantic-index-summary/v1",
-  "workflow_run": 31360961575
+  "workflow_run": 31385716201
 }
