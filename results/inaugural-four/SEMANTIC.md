@@ -7,10 +7,10 @@ Ouroboros 0.3 is the current semantic model. The earlier 0.2 results remain docu
 ## Canonical 0.3 run
 
 - analyzer: `Ouroboros 0.3.0`
-- analyzer source: `83571940e8d09a76c9869ec4d5a46d82cb012d4f`
-- GitHub Actions run: `31360961575`
-- aggregate artifact: `9052391519`
-- aggregate digest: `sha256:4949926f98a7b9f20bde2d278e85c632f60dfa7b24ea61fb8b1097d5710f553e`
+- analyzer source: `db9fb020b82dec58326983c05946f28dc92f5d92`
+- GitHub Actions run: `31385716201`
+- aggregate artifact: `9061692875`
+- aggregate digest: `sha256:39884b65e21b3fb296b784cdd5417ed6923260efc73c59966729282efd63037b`
 - traversal truncation: **none of the four repositories**
 - target code executed: **never**
 - target-authored `.ouroboros.json`: **ignored by canonical mode**
@@ -21,7 +21,7 @@ The compact reproducible record is in [`semantic-index-0.3.json`](semantic-index
 
 | Repository | Symbols | Product | Machinery | Scaffold/Product | Audit | Meta | Exact | Resolvable | Far recursive machinery | Depth | Semantic Index |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `ryokun6/ryos` | 7,662 | 74.2% | 17.4% | 0.23:1 | 0.30% | 0% | 6.3% | 20.9% | 0.08% | 1 | **2.64** |
+| `ryokun6/ryos` | 7,662 | 74.1% | 17.4% | 0.23:1 | 0.30% | 0% | 6.3% | 20.9% | 0.08% | 1 | **2.64** |
 | `permissionlesstech/bitchat` | 28,365 | 31.9% | **56.9%** | **1.78:1** | 0% | 0% | 17.2% | 36.4% | 0.66% | 1 | **2.63** |
 | `srizzon/git-city` | 2,403 | **94.2%** | 0.8% | 0.01:1 | 0% | 0% | 6.7% | 13.2% | 0% | 1 | **2.50** |
 | `rdumasia303/deepseek_ocr_app` | 37 | 78.4% | 21.6% | 0.28:1 | 0% | 0% | 2.2% | 2.2% | 0% | 0 | **0.00** |
@@ -61,7 +61,9 @@ The 0.3 semantic Index's far-distance term counts **recursive machinery categori
 - canonical topology uses **EXACT relationships only**;
 - probable/unresolved relationships remain visible as coverage evidence;
 - recursive traversal has an explicit expansion budget and reports truncation;
+- each product root gets independent traversal memoization while the global safety budget remains shared;
 - parser/adapter failure is isolated per file;
+- every declared Tree-sitter parser key is required and verified in CI;
 - JSON output is strict (`null`, never non-standard `Infinity`);
 - canonical public scans ignore repository-authored classification overrides;
 - target repository code is never executed.
