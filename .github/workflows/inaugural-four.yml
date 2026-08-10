@@ -26,6 +26,8 @@ jobs:
           assert len(records) == 4
           frozen = {(row['repository'], row['sha']) for row in benchmark}
           published = {(row['repository'], row['sha']) for row in records}
+          assert len(frozen) == 4
+          assert len(published) == 4
           assert frozen == published
           print('Frozen 0.1 inaugural corpus is internally consistent.')
           PY
