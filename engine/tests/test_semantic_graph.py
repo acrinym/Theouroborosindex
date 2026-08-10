@@ -48,7 +48,7 @@ def record_validation():
     assert names["Player.move"].kind == SymbolKind.METHOD
     assert names["resolve"].value_distance is not None
     call_edges = [edge for edge in graph.edges if edge.kind == EdgeKind.CALLS]
-    assert any(edge.target_name == "resolve" and edge.resolution == Resolution.EXACT for edge in call_edges)
+    assert any(edge.target_name == "physics.resolve" and edge.resolution == Resolution.EXACT for edge in call_edges)
     assert graph.metrics is not None
     assert graph.metrics.symbol_count >= 5
     assert graph.metrics.max_recursive_depth >= 2
