@@ -28,6 +28,7 @@ def _index_record(
     index: float = 10.0,
     exact: float = 0.8,
     relationships: int = 10,
+    symbols: bool = True,
     scanned_at: str = "2026-08-10T00:00:00Z",
 ) -> dict:
     total = product + testing + tooling
@@ -55,11 +56,15 @@ def _index_record(
                 "testing": testing,
                 "developer-tooling": tooling,
             },
-            "category_symbol_counts": {
-                "core-product": product // 10,
-                "testing": max(1, testing // 10),
-                "developer-tooling": max(1, tooling // 10),
-            },
+            "category_symbol_counts": (
+                {
+                    "core-product": product // 10,
+                    "testing": max(1, testing // 10),
+                    "developer-tooling": max(1, tooling // 10),
+                }
+                if symbols
+                else {}
+            ),
         },
     }
 
@@ -97,9 +102,12 @@ def _scan(name: str = "/tmp/query") -> dict:
     }
 
 
-def test_legacy_semantic_records_share_measurement_model():
-    fingerprint = fingerprint_from_index_record(_index_record("org/repo", sha="1" * 40, version="0.4.0"))
-    assert fingerprint["measurement_model"] == MEASUREMENT_MODEL
+def test_declared_semantic_releases_share_measurement_model_but_future_release_does_not():
+    for version in ("0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.7.0.dev0"):
+        fingerprint = fingerprint_from_index_record(_index_record("org/repo", sha="1" * 40, version=version))
+        assert fingerprint["measurement_model"] == MEASUREMENT_MODEL
+    future = fingerprint_from_index_record(_index_record("org/future", sha="2" * 40, version="0.8.0"))
+    assert future["measurement_model"] is None
 
 
 def test_structural_distance_is_zero_for_identical_anatomy_and_decomposed():
@@ -126,6 +134,14 @@ def test_missing_exact_coverage_is_removed_and_weights_are_renormalized():
     assert abs(sum(row["effective_weight"] for row in result["components"].values()) - 1.0) < 1e-9
 
 
+def test_missing_symbol_evidence_is_removed_instead_of_penalized():
+    query = fingerprint_from_index_record(_index_record("org/query", sha="1" * 40, symbols=False))
+    peer = fingerprint_from_index_record(_index_record("org/peer", sha="2" * 40))
+    result = structural_distance(query, peer)
+    assert "symbol_composition" not in result["components"]
+    assert abs(sum(row["effective_weight"] for row in result["components"].values()) - 1.0) < 1e-9
+
+
 def test_neighbor_ranking_prefers_closer_anatomy_and_excludes_same_repo():
     query_record = _index_record("org/query", sha="1" * 40)
     query = fingerprint_from_index_record(query_record)
@@ -135,14 +151,39 @@ def test_neighbor_ranking_prefers_closer_anatomy_and_excludes_same_repo():
     result = find_neighbors(query, [far, same_repo, close, query_record], limit=10)
     assert [row["repository_name"] for row in result["neighbors"]] == ["org/close", "org/far"]
     assert result["neighbors"][0]["distance"] < result["neighbors"][1]["distance"]
-    assert result["cohort"]["excluded"]["same_repository"] == 2
+    assert result["cohort"]["excluded"]["same_identity"] == 1
+    assert result["cohort"]["excluded"]["same_repository"] == 1
     assert "quality score" in result["distance_semantics"]["meaning"]
+
+
+def test_neighbor_results_collapse_multiple_candidate_revisions_to_closest_record():
+    query = fingerprint_from_index_record(_index_record("org/query", sha="1" * 40))
+    close_revision = _index_record("org/peer", sha="2" * 40, product=69, testing=20, tooling=11)
+    far_revision = _index_record("org/peer", sha="3" * 40, product=30, testing=40, tooling=30, depth=4, index=50.0)
+    other = _index_record("org/other", sha="4" * 40, product=60, testing=25, tooling=15)
+    result = find_neighbors(query, [far_revision, other, close_revision], limit=10)
+    assert [row["repository_name"] for row in result["neighbors"]] == ["org/peer", "org/other"]
+    assert result["neighbors"][0]["repository_sha"] == "2" * 40
+    assert result["cohort"]["eligible_records"] == 3
+    assert result["cohort"]["eligible_repositories"] == 2
+
+
+def test_unknown_future_measurement_model_is_excluded_unless_cross_model_enabled():
+    query = fingerprint_from_index_record(_index_record("org/query", sha="1" * 40, version="0.7.0"))
+    future = _index_record("org/future", sha="2" * 40, version="0.8.0")
+    strict = find_neighbors(query, [future])
+    assert strict["neighbors"] == []
+    assert strict["cohort"]["excluded"]["measurement_model_mismatch"] == 1
+    permissive = find_neighbors(query, [future], cross_model=True)
+    assert permissive["neighbors"][0]["comparable_measurement_model"] is False
 
 
 def test_scan_fingerprint_is_compatible_with_index_semantic_model():
     fingerprint = fingerprint_from_scan(_scan())
     assert fingerprint["measurement_model"] == MEASUREMENT_MODEL
     assert fingerprint["code_category_shares"]["core-product"] == 0.7
+    assert fingerprint["code_line_total"] == 100
+    assert fingerprint["symbol_count"] == 4
     assert fingerprint["relationship_count"] == 10
 
 
