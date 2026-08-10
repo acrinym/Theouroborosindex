@@ -10,6 +10,7 @@ from .analyze import analyze_repository
 from .classify import classify
 from .config import Config, load_config
 from .graph import resolve_dependencies
+from .report import write_report
 from .scanner import scan_repository
 from .semantic import build_semantic_graph
 
@@ -61,7 +62,7 @@ def _friendly_summary(path: Path, baseline, semantic) -> str:
             lines.append(f"  - Semantic parser diagnostics: {error_count} error(s), {warning_count} warning(s).")
     lines.extend([
         "",
-        "Tip: a high score is a prompt to inspect the exact chains, not a verdict that tests or tooling are bad.",
+        "Tip: use --report for a self-contained Repository Anatomy view with exact-chain and classification evidence.",
     ])
     return "\n".join(lines)
 
@@ -84,6 +85,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("path", nargs="?", default=".", help="Repository/folder to scan (default: current folder)")
     parser.add_argument("--json", dest="json_path", help="Also save the full result as JSON")
+    parser.add_argument(
+        "--report",
+        dest="report_path",
+        nargs="?",
+        const="ouroboros-report.html",
+        metavar="HTML",
+        help="Write a self-contained Repository Anatomy HTML report (default: ouroboros-report.html)",
+    )
     parser.add_argument("--quiet", action="store_true", help="Suppress the friendly text summary")
     parser.add_argument("--canonical", action="store_true", help="Ignore repo-authored .ouroboros.json overrides, like the public Index")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -121,6 +130,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         if not args.quiet:
             print(f"\nFull JSON saved to: {target.resolve()}")
+
+    if args.report_path:
+        try:
+            report_path = write_report(root, baseline, semantic, args.report_path)
+        except (OSError, ValueError) as exc:
+            print(f"Ouroboros could not write report {args.report_path}: {exc}")
+            return 2
+        if not args.quiet:
+            print(f"\nRepository Anatomy report saved to: {report_path}")
+
     return 0
 
 
