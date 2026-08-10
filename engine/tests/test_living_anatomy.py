@@ -134,6 +134,8 @@ def test_living_report_is_self_contained_and_escapes_repository_strings():
     html = build_living_report_html("repo<script>x</script>", _analysis(malicious=True), _semantic())
     assert "Living repository map" in html
     assert "Anatomy fingerprint" in html
+    assert ".repo-map .cat-core-product > rect { fill:#2f8f72; }" in html
+    assert ".repo-map .cat-testing > rect { fill:#a987db; }" in html
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script src=" not in html.lower()
