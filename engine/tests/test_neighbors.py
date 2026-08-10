@@ -156,6 +156,18 @@ def test_neighbor_ranking_prefers_closer_anatomy_and_excludes_same_repo():
     assert "quality score" in result["distance_semantics"]["meaning"]
 
 
+def test_same_repository_revisions_are_available_only_when_explicitly_enabled():
+    query_record = _index_record("org/query", sha="1" * 40)
+    query = fingerprint_from_index_record(query_record)
+    revision = _index_record("org/query", sha="2" * 40, product=69, testing=20, tooling=11)
+    peer = _index_record("org/peer", sha="3" * 40, product=60, testing=25, tooling=15)
+    strict = find_neighbors(query, [query_record, revision, peer], limit=10)
+    assert [row["repository_name"] for row in strict["neighbors"]] == ["org/peer"]
+    enabled = find_neighbors(query, [query_record, revision, peer], limit=10, include_same_repository=True)
+    assert [row["repository_name"] for row in enabled["neighbors"]] == ["org/query", "org/peer"]
+    assert enabled["neighbors"][0]["repository_sha"] == "2" * 40
+
+
 def test_neighbor_results_collapse_multiple_candidate_revisions_to_closest_record():
     query = fingerprint_from_index_record(_index_record("org/query", sha="1" * 40))
     close_revision = _index_record("org/peer", sha="2" * 40, product=69, testing=20, tooling=11)
