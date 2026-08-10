@@ -74,6 +74,8 @@ def _score_local(symbol: Symbol, snippet: str) -> dict[Category, float]:
         body_hits = snippet_tokens & words
         if name_hits:
             scores[category] += 5.0 + min(2.0, 0.5 * (len(name_hits) - 1))
+            if category == Category.META_MACHINERY:
+                scores[category] += 1.0
         if body_hits:
             scores[category] += min(2.0, 0.35 * len(body_hits))
     return scores
