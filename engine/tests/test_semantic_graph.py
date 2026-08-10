@@ -1,6 +1,8 @@
+from ouroboros.graph import find_audit_chains
 from ouroboros.model import Category, Component
 from ouroboros.scanner import ScannedFile
 from ouroboros.semantic import EdgeKind, Resolution, SymbolKind, build_semantic_graph
+from ouroboros.semantic.adapters import TREE_SITTER_LANGUAGE_KEYS
 from ouroboros.semantic.graph import finalize_graph
 from ouroboros.semantic.model import SemanticEdge, SemanticGraph, Symbol
 
@@ -162,3 +164,66 @@ def test_major_tree_sitter_adapters_emit_symbols():
         graph = build_semantic_graph([scanned(f"sample.{language}", text, Category.CORE_PRODUCT, language)])
         non_files = [symbol for symbol in graph.symbols.values() if symbol.kind != SymbolKind.FILE]
         assert non_files, f"expected symbols for {language}"
+
+
+def test_every_declared_tree_sitter_parser_key_loads():
+    from tree_sitter_language_pack import get_parser
+
+    for parser_key in sorted(set(TREE_SITTER_LANGUAGE_KEYS.values())):
+        assert get_parser(parser_key) is not None, parser_key
+
+
+def test_semantic_chain_traversal_keeps_each_product_root_independent():
+    product_a = Symbol(
+        id="a.py::run_a@1", path="a.py", language="python", kind=SymbolKind.FUNCTION,
+        name="run_a", qualified_name="run_a", start_line=1, end_line=1, category=Category.CORE_PRODUCT,
+    )
+    product_b = Symbol(
+        id="b.py::run_b@1", path="b.py", language="python", kind=SymbolKind.FUNCTION,
+        name="run_b", qualified_name="run_b", start_line=1, end_line=1, category=Category.CORE_PRODUCT,
+    )
+    verifier = Symbol(
+        id="verify.py::check@1", path="verify.py", language="python", kind=SymbolKind.FUNCTION,
+        name="check", qualified_name="check", start_line=1, end_line=1, category=Category.VERIFICATION,
+    )
+    auditor = Symbol(
+        id="audit.py::record@1", path="audit.py", language="python", kind=SymbolKind.FUNCTION,
+        name="record", qualified_name="record", start_line=1, end_line=1, category=Category.AUDIT_PROVENANCE,
+    )
+    edges = [
+        SemanticEdge(source_id=verifier.id, kind=EdgeKind.CALLS, target_name="run_a", target_id=product_a.id, resolution=Resolution.EXACT),
+        SemanticEdge(source_id=verifier.id, kind=EdgeKind.CALLS, target_name="run_b", target_id=product_b.id, resolution=Resolution.EXACT),
+        SemanticEdge(source_id=auditor.id, kind=EdgeKind.CALLS, target_name="check", target_id=verifier.id, resolution=Resolution.EXACT),
+    ]
+    graph = finalize_graph(SemanticGraph(
+        symbols={symbol.id: symbol for symbol in (product_a, product_b, verifier, auditor)},
+        edges=edges,
+    ))
+    deep_roots = {chain.symbol_ids[0] for chain in graph.chains if chain.depth >= 2}
+    assert deep_roots == {product_a.id, product_b.id}
+
+
+def test_file_chain_traversal_keeps_each_product_root_independent():
+    components = [
+        Component("a.py", "python", 1, 1, 1, category=Category.CORE_PRODUCT),
+        Component("b.py", "python", 1, 1, 1, category=Category.CORE_PRODUCT),
+        Component("verify.py", "python", 1, 1, 1, category=Category.VERIFICATION),
+        Component("audit.py", "python", 1, 1, 1, category=Category.AUDIT_PROVENANCE),
+    ]
+    graph = {
+        "a.py": set(),
+        "b.py": set(),
+        "verify.py": {"a.py", "b.py"},
+        "audit.py": {"verify.py"},
+    }
+    chains = find_audit_chains(components, graph)
+    deep_roots = {chain.paths[0] for chain in chains if chain.depth >= 2}
+    assert deep_roots == {"a.py", "b.py"}
+
+
+def test_compound_meta_role_beats_generic_audit_word():
+    graph = build_semantic_graph([
+        scanned("mixed.py", "class MetaAudit:\n    pass\n", Category.VERIFICATION)
+    ])
+    meta = next(symbol for symbol in graph.symbols.values() if symbol.name == "MetaAudit")
+    assert meta.category == Category.META_MACHINERY
