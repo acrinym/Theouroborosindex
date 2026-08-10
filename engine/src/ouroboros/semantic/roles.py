@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from pathlib import PurePosixPath
 
-from ouroboros.model import MACHINERY_CATEGORIES, Category
+from ouroboros.model import MACHINERY_CATEGORIES, PRODUCT_CATEGORIES, Category
 from ouroboros.scanner import ScannedFile
 
 from .model import SemanticGraph, Symbol, SymbolKind
@@ -11,10 +12,10 @@ from .model import SemanticGraph, Symbol, SymbolKind
 
 ROLE_WORDS: dict[Category, set[str]] = {
     Category.META_MACHINERY: {"metaaudit", "auditofaudit", "auditquality", "reportvalidator"},
-    Category.AUDIT_PROVENANCE: {"audit", "auditor", "provenance", "receipt", "reconcile", "reconciliation", "attestation", "traceability", "lineage"},
+    Category.AUDIT_PROVENANCE: {"audit", "auditor", "provenance", "reconcile", "reconciliation", "traceability", "lineage"},
     Category.VERIFICATION: {"verify", "verified", "verification", "validate", "validation", "validator", "integrity", "checksum", "sha256", "invariant", "consistency"},
-    Category.OBSERVABILITY: {"telemetry", "trace", "tracing", "metric", "metrics", "logging", "logger", "monitor", "monitoring", "diagnostic", "diagnostics"},
-    Category.PROCESS_MACHINERY: {"workflow", "pipeline", "deploy", "deployment", "release", "packaging", "build"},
+    Category.OBSERVABILITY: {"telemetry", "trace", "tracing", "logging", "logger", "monitor", "monitoring", "diagnostic", "diagnostics", "opentelemetry"},
+    Category.PROCESS_MACHINERY: {"workflow", "deploy", "deployment", "packaging", "release"},
     Category.DEVELOPER_TOOLING: {"probe", "benchmark", "bench", "scaffold", "generator", "codemod", "migration", "bootstrap"},
     Category.USER_SURFACE: {"gui", "view", "screen", "dialog", "window", "controller", "route", "endpoint", "cli", "command", "menu", "frontend"},
     Category.ESSENTIAL_SUPPORT: {"config", "configuration", "storage", "store", "history", "cache", "serializer", "serialization", "parser", "loader", "filesystem", "transport", "protocol", "adapter", "catalog", "archive"},
@@ -22,13 +23,18 @@ ROLE_WORDS: dict[Category, set[str]] = {
 
 _PATH_STRONG_WORDS = {
     Category.TESTING: {"test", "tests", "spec", "specs", "fixtures"},
-    Category.AUDIT_PROVENANCE: {"audit", "audits", "provenance", "receipts"},
-    Category.META_MACHINERY: {"metaaudit", "meta"},
-    Category.OBSERVABILITY: {"telemetry", "observability", "monitoring"},
-    Category.VERIFICATION: {"verify", "verification", "validators", "validation"},
-    Category.PROCESS_MACHINERY: {"workflow", "workflows", "ci", "cd"},
+    Category.AUDIT_PROVENANCE: {"audit", "audits", "provenance"},
+    Category.META_MACHINERY: {"metaaudit"},
+    Category.OBSERVABILITY: {"telemetry", "observability", "monitoring", "logging"},
+    Category.VERIFICATION: {"verification", "validators", "validation"},
+    Category.PROCESS_MACHINERY: {"workflow", "workflows", "ci", "cd", "deployment"},
     Category.DEVELOPER_TOOLING: {"scripts", "tools", "benchmarks", "probes"},
     Category.USER_SURFACE: {"gui", "views", "screens", "controllers", "routes", "frontend"},
+}
+
+_PRODUCT_PARENT_WORDS = {
+    "src", "source", "sources", "app", "apps", "service", "services",
+    "protocol", "protocols", "feature", "features", "domain", "core", "sync",
 }
 
 
@@ -45,6 +51,11 @@ def _path_role(path: str) -> Category | None:
     return None
 
 
+def _product_context(path: str) -> bool:
+    parent = PurePosixPath(path).parent.as_posix()
+    return bool(_tokens(parent) & _PRODUCT_PARENT_WORDS)
+
+
 def _score_local(symbol: Symbol, snippet: str) -> dict[Category, float]:
     scores: dict[Category, float] = defaultdict(float)
     name_tokens = _tokens(symbol.name) | _tokens(symbol.qualified_name)
@@ -59,8 +70,17 @@ def _score_local(symbol: Symbol, snippet: str) -> dict[Category, float]:
     return scores
 
 
+def _best_local(scores: dict[Category, float]) -> tuple[Category, float, float] | None:
+    if not scores:
+        return None
+    ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    best_category, best = ordered[0]
+    second = ordered[1][1] if len(ordered) > 1 else 0.0
+    return best_category, best, second
+
+
 def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFile]) -> None:
-    """Refine file-seeded roles at symbol level without promoting weak evidence."""
+    """Refine mixed-purpose files without letting domain vocabulary hijack architecture."""
     text_by_path = {item.component.path: item.text for item in scanned_files}
     for symbol in graph.symbols.values():
         if symbol.kind == SymbolKind.FILE:
@@ -79,21 +99,28 @@ def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFi
         start = max(0, symbol.start_line - 1)
         end = max(start + 1, min(len(lines), symbol.end_line))
         snippet = "\n".join(lines[start:end])
-        scores = _score_local(symbol, snippet)
-        if scores:
-            ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-            best_category, best = ordered[0]
-            second = ordered[1][1] if len(ordered) > 1 else 0.0
-            if best >= 5.0 and best - second >= 0.5:
+        best = _best_local(_score_local(symbol, snippet))
+
+        if symbol.category not in MACHINERY_CATEGORIES:
+            if best is not None:
+                best_category, score, second = best
+                if best_category not in MACHINERY_CATEGORIES and score >= 5.0 and score - second >= 0.5:
+                    symbol.category = best_category
+                    symbol.role_confidence = min(0.95, 0.66 + 0.04 * score)
+                    symbol.role_source = "symbol-local-product-evidence"
+                    continue
+            symbol.role_confidence = 0.72 if symbol.category in PRODUCT_CATEGORIES else 0.62
+            symbol.role_source = "file-seed-preserved"
+            continue
+
+        if best is not None:
+            best_category, score, second = best
+            if best_category in MACHINERY_CATEGORIES and score >= 5.0 and score - second >= 0.5:
                 symbol.category = best_category
-                symbol.role_confidence = min(0.97, 0.68 + 0.04 * best)
-                symbol.role_source = "symbol-local-evidence"
+                symbol.role_confidence = min(0.97, 0.68 + 0.04 * score)
+                symbol.role_source = "symbol-local-machinery-evidence"
                 continue
 
-        if symbol.category in MACHINERY_CATEGORIES:
-            symbol.category = Category.ESSENTIAL_SUPPORT
-            symbol.role_confidence = 0.62
-            symbol.role_source = "mixed-file-neutral-symbol"
-        else:
-            symbol.role_confidence = 0.58
-            symbol.role_source = "file-seed-no-local-override"
+        symbol.category = Category.CORE_PRODUCT if _product_context(symbol.path) else Category.ESSENTIAL_SUPPORT
+        symbol.role_confidence = 0.68 if symbol.category == Category.CORE_PRODUCT else 0.62
+        symbol.role_source = "mixed-file-context-fallback"

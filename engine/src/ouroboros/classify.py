@@ -61,10 +61,8 @@ def classify(scanned: ScannedFile, override: Category | None = None) -> Componen
         component.signals = [Signal(override, 10.0, "repository-declared path role")]
         return component
 
-    path_lower = component.path.lower()
     content = scanned.text[:120_000].lower()
     path_tokens = normalized_tokens(component.path)
-    flat_path = path_lower.replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
     scores: dict[Category, float] = defaultdict(float)
     signals: list[Signal] = []
 
@@ -78,10 +76,8 @@ def classify(scanned: ScannedFile, override: Category | None = None) -> Componen
     for category, phrases in CATEGORY_RULES.items():
         path_hits: list[str] = []
         for phrase in phrases:
-            if " " not in phrase and len(phrase) < 4:
-                if phrase in path_tokens:
-                    path_hits.append(phrase)
-            elif phrase.replace(" ", "") in flat_path:
+            phrase_tokens = normalized_tokens(phrase)
+            if phrase_tokens and phrase_tokens <= path_tokens:
                 path_hits.append(phrase)
         if path_hits:
             weight = PATH_PRIORITY[category] + min(2.0, 0.35 * (len(path_hits) - 1))

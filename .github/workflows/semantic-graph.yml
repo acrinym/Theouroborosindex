@@ -29,48 +29,9 @@ jobs:
           python -m pytest -q engine/tests
           ouroboros --version
 
-  bite-tail-once:
-    if: github.event_name == 'pull_request'
-    needs: semantic-tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install Ouroboros
-        run: python -m pip install --disable-pip-version-check -e engine
-      - name: Bite the tail exactly once
-        run: |
-          mkdir -p out
-          ouroboros . --canonical --quiet --json out/self-bite.json
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          result = json.loads(Path('out/self-bite.json').read_text())
-          metrics = result['semantic']['metrics']
-          assert result['analyzer']['version'].startswith('0.3.')
-          assert metrics['symbol_count'] > 0
-          assert metrics['chain_truncated'] is False
-          assert all(chain.get('canonical_resolution') == 'exact' for chain in result['semantic']['chains'])
-          Path('out/summary.txt').write_text(
-              f"Product symbols: {metrics['direct_product_symbol_share']*100:.1f}%\n"
-              f"Machinery symbols: {metrics['machinery_symbol_share']*100:.1f}%\n"
-              f"Recursive depth: {metrics['max_recursive_depth']}\n"
-              f"Semantic Index: {metrics['semantic_ouroboros_index']:.2f}\n"
-          )
-          print(Path('out/summary.txt').read_text())
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ouroboros-self-bite-once
-          path: out/
-          if-no-files-found: error
-          retention-days: 30
+  # The one intentional self-bite ran successfully on PR head
+  # 382f274bc1782e8a84b95f9124792d388f991d00 (Actions run 31359852498).
+  # It is intentionally not a recurring job. See results/self-bite-0.3.md.
 
   semantic-inaugural-four:
     needs: semantic-tests
