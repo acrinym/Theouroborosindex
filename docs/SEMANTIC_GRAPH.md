@@ -54,7 +54,7 @@ The canonical recursive-depth search itself follows EXACT relationships only. Pr
 
 ## Coverage
 
-The semantic report exposes exact relationship rate, exact + probable resolvable rate, parser diagnostics, product-reachable symbols, far-recursive-machinery share, recursive depth, expansion count, and whether traversal was truncated.
+The semantic report exposes exact relationship rate, exact + probable resolvable rate, parser diagnostics, product-reachable symbols, far-recursive-machinery share, recursive depth, expansion count, and whether traversal was truncated. The two relationship rates are calculated over non-`CONTAINS` relationships only; lexical containment edges are excluded from their denominator.
 
 Low coverage is uncertainty, not a low-score guarantee.
 
@@ -65,3 +65,5 @@ The semantic Index weights are fixed public constants for an analyzer version. T
 Changing the scoring formula, trust semantics, or role model requires an analyzer-version change so corpus records remain reproducible.
 
 0.3 is such a version change: symbol-local roles, stricter exact-resolution semantics, and the recursive-distance correction intentionally mean old 0.2 semantic scores are historical rather than directly interchangeable.
+
+The historical 0.2 artifact remains at `results/inaugural-four/semantic-index.json`. The 0.3 artifact is versioned separately at `results/inaugural-four/semantic-index-0.3.json` so the old record is preserved rather than silently rewritten.
