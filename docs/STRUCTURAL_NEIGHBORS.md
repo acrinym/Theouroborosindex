@@ -68,7 +68,7 @@ The output includes the distance of each dimension and its weighted contribution
 
 ## Measurement compatibility
 
-Ouroboros 0.3 introduced the current semantic measurement generation. Releases 0.4 through 0.7 add ingestion and user-facing product surfaces without changing that semantic measurement generation, so Structural Neighbors identifies these records as `ouroboros-semantic-v1` for compatibility.
+Ouroboros 0.3 introduced the current semantic measurement generation. Releases 0.4 through 0.8 add ingestion, reporting, comparison, neighbor-search, and bounded-history product surfaces without changing that semantic measurement generation, so Structural Neighbors identifies these records as `ouroboros-semantic-v1` for compatibility.
 
 By default, neighbor search requires the same measurement model and the same canonical/non-canonical setting. Incompatible records are excluded from the cohort.
 
