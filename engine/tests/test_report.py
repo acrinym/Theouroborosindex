@@ -74,3 +74,22 @@ def test_report_flag_has_friendly_default_filename():
     assert args.report_path == "ouroboros-report.html"
     args = build_parser().parse_args([".", "--report", "my-report.html"])
     assert args.report_path == "my-report.html"
+
+
+def test_zero_relationship_scan_does_not_claim_full_exact_coverage():
+    baseline, semantic = _fixture()
+    semantic.edges = []
+    semantic.chains = []
+    semantic.metrics.relationship_count = 0
+    semantic.metrics.resolved_relationships = 0
+    semantic.metrics.probable_relationships = 0
+    semantic.metrics.unresolved_relationships = 0
+    semantic.metrics.exact_resolution_rate = 1.0
+    semantic.metrics.resolution_rate = 1.0
+    semantic.metrics.max_recursive_depth = 0
+
+    html = build_report_html("/tmp/demo", baseline, semantic)
+
+    assert '<div class="label">Exact coverage</div><div class="value">n/a</div>' in html
+    assert "relationship-resolution coverage is not meaningful" in html
+    assert "resolution percentages are not meaningful" in html
