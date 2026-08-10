@@ -1,0 +1,33 @@
+name: Frozen Ouroboros 0.1 corpus
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-frozen-corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate frozen inaugural records
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          benchmark = json.loads(Path('benchmarks/inaugural-four.json').read_text())
+          records = json.loads(Path('results/inaugural-four/index.json').read_text())
+          assert len(benchmark) == 4
+          assert len(records) == 4
+          frozen = {(row['repository'], row['sha']) for row in benchmark}
+          published = {(row['repository'], row['sha']) for row in records}
+          assert len(frozen) == 4
+          assert len(published) == 4
+          assert frozen == published
+          print('Frozen 0.1 inaugural corpus is internally consistent.')
+          PY

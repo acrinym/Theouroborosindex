@@ -1,0 +1,93 @@
+{
+  "analyzer": "Ouroboros 0.3.0",
+  "artifact_digest": "sha256:39884b65e21b3fb296b784cdd5417ed6923260efc73c59966729282efd63037b",
+  "artifact_id": 9061692875,
+  "records": [
+    {
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
+      "analyzer_version": "0.3.0",
+      "metrics": {
+        "audit_symbol_share": 0.003001827199164709,
+        "chain_expansions": 4413,
+        "chain_truncated": false,
+        "direct_product_symbol_share": 0.7411902897415819,
+        "exact_resolution_rate": 0.0631133182537118,
+        "far_from_value_symbol_share": 0.0007830853563038371,
+        "machinery_symbol_share": 0.17397546332550248,
+        "max_recursive_depth": 1,
+        "meta_symbol_share": 0.0,
+        "resolution_rate": 0.20896613887991292,
+        "scaffolding_symbol_ratio": 0.23472442331396373,
+        "semantic_ouroboros_index": 2.635734795092665,
+        "symbol_count": 7662
+      },
+      "repository": "ryokun6/ryos",
+      "repository_sha": "c599b3102900f20f66c48dff2b4562d07ddd52cf"
+    },
+    {
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
+      "analyzer_version": "0.3.0",
+      "metrics": {
+        "audit_symbol_share": 0.0,
+        "chain_expansions": 3841,
+        "chain_truncated": false,
+        "direct_product_symbol_share": 0.3189494094835184,
+        "exact_resolution_rate": 0.1716215075546552,
+        "far_from_value_symbol_share": 0.006592631764498502,
+        "machinery_symbol_share": 0.5686938127974617,
+        "max_recursive_depth": 1,
+        "meta_symbol_share": 0.0,
+        "resolution_rate": 0.363501308348105,
+        "scaffolding_symbol_ratio": 1.783021996241848,
+        "semantic_ouroboros_index": 2.63185263528997,
+        "symbol_count": 28365
+      },
+      "repository": "permissionlesstech/bitchat",
+      "repository_sha": "1f59e814f90c3f489f48d68262cb1bf640bf6181"
+    },
+    {
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
+      "analyzer_version": "0.3.0",
+      "metrics": {
+        "audit_symbol_share": 0.0,
+        "chain_expansions": 1947,
+        "chain_truncated": false,
+        "direct_product_symbol_share": 0.9421556387848523,
+        "exact_resolution_rate": 0.06741648706896551,
+        "far_from_value_symbol_share": 0.0,
+        "machinery_symbol_share": 0.008322929671244279,
+        "max_recursive_depth": 1,
+        "meta_symbol_share": 0.0,
+        "resolution_rate": 0.13240840517241378,
+        "scaffolding_symbol_ratio": 0.0088339222614841,
+        "semantic_ouroboros_index": 2.5,
+        "symbol_count": 2403
+      },
+      "repository": "srizzon/git-city",
+      "repository_sha": "bb4d9102af6126970bbce1fb3e20d818df4a535f"
+    },
+    {
+      "analyzer_source_head": "db9fb020b82dec58326983c05946f28dc92f5d92",
+      "analyzer_version": "0.3.0",
+      "metrics": {
+        "audit_symbol_share": 0.0,
+        "chain_expansions": 7,
+        "chain_truncated": false,
+        "direct_product_symbol_share": 0.7837837837837838,
+        "exact_resolution_rate": 0.02247191011235955,
+        "far_from_value_symbol_share": 0.0,
+        "machinery_symbol_share": 0.21621621621621623,
+        "max_recursive_depth": 0,
+        "meta_symbol_share": 0.0,
+        "resolution_rate": 0.02247191011235955,
+        "scaffolding_symbol_ratio": 0.27586206896551724,
+        "semantic_ouroboros_index": 0.0,
+        "symbol_count": 37
+      },
+      "repository": "rdumasia303/deepseek_ocr_app",
+      "repository_sha": "3dac0741b18afc934c063e8528e7576f4d63efe5"
+    }
+  ],
+  "schema": "ouroboros-semantic-index-summary/v1",
+  "workflow_run": 31385716201
+}

@@ -1,0 +1,89 @@
+{
+  "benchmark": "inaugural-four",
+  "captured_at": "2026-08-07",
+  "accepted_workflow_run": 31230688551,
+  "analyzer": {
+    "name": "Ouroboros",
+    "version": "0.1.0",
+    "source_head": "8ae603829e5ca4be7b0961a5d9dd5d20393b837d"
+  },
+  "policy": {
+    "repository_specific_overrides": false,
+    "ordering": "ouroboros_index_desc",
+    "stars_are_score_input": false
+  },
+  "records": [
+    {
+      "repository": "ryokun6/ryos",
+      "sha": "c599b3102900f20f66c48dff2b4562d07ddd52cf",
+      "stars_at_selection": 1223,
+      "warnings": [],
+      "metrics": {
+        "direct_product_share": 0.756392630711535,
+        "product_plus_essential_share": 0.7803991557775424,
+        "tooling_share": 0.21960084422245765,
+        "audit_ratio": 0.0019255671594100533,
+        "meta_machinery_share": 0.0,
+        "assurance_ratio": 0.17795544110397885,
+        "scaffolding_ratio": 0.2903265252807662,
+        "far_from_value_share": 0.0,
+        "max_audit_depth": 2,
+        "ouroboros_index": 5.077022686376402
+      }
+    },
+    {
+      "repository": "srizzon/git-city",
+      "sha": "bb4d9102af6126970bbce1fb3e20d818df4a535f",
+      "stars_at_selection": 5750,
+      "warnings": [],
+      "metrics": {
+        "direct_product_share": 0.5544231850263371,
+        "product_plus_essential_share": 0.6536559721846308,
+        "tooling_share": 0.3463440278153692,
+        "audit_ratio": 0.00022381378692927484,
+        "meta_machinery_share": 0.0,
+        "assurance_ratio": 0.0034479189062213834,
+        "scaffolding_ratio": 0.6246925402279427,
+        "far_from_value_share": 0.0,
+        "max_audit_depth": 2,
+        "ouroboros_index": 5.0089525514771704
+      }
+    },
+    {
+      "repository": "permissionlesstech/bitchat",
+      "sha": "1f59e814f90c3f489f48d68262cb1bf640bf6181",
+      "stars_at_selection": 34736,
+      "warnings": [],
+      "metrics": {
+        "direct_product_share": 0.409552258787894,
+        "product_plus_essential_share": 0.4730861594330229,
+        "tooling_share": 0.5269138405669771,
+        "audit_ratio": 0.010476023127578215,
+        "meta_machinery_share": 0.0,
+        "assurance_ratio": 1.063743610605069,
+        "scaffolding_ratio": 1.286560699546439,
+        "far_from_value_share": 0.0,
+        "max_audit_depth": 1,
+        "ouroboros_index": 2.919040925103128
+      }
+    },
+    {
+      "repository": "rdumasia303/deepseek_ocr_app",
+      "sha": "3dac0741b18afc934c063e8528e7576f4d63efe5",
+      "stars_at_selection": 1887,
+      "warnings": [],
+      "metrics": {
+        "direct_product_share": 0.954059405940594,
+        "product_plus_essential_share": 0.954059405940594,
+        "tooling_share": 0.04594059405940594,
+        "audit_ratio": 0.0,
+        "meta_machinery_share": 0.0,
+        "assurance_ratio": 0.048152760481527605,
+        "scaffolding_ratio": 0.048152760481527605,
+        "far_from_value_share": 0.0,
+        "max_audit_depth": 0,
+        "ouroboros_index": 0.0
+      }
+    }
+  ]
+}
