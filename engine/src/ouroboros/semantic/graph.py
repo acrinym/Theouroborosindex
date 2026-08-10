@@ -11,6 +11,8 @@ from .model import EdgeKind, ParseDiagnostic, Resolution, SemanticChain, Semanti
 
 _GRAPH_EDGE_KINDS = {EdgeKind.CALLS, EdgeKind.IMPORTS, EdgeKind.INHERITS, EdgeKind.IMPLEMENTS, EdgeKind.REFERENCES}
 _DISTANCE_EDGE_KINDS = _GRAPH_EDGE_KINDS | {EdgeKind.CONTAINS}
+
+# Public scoring constants. Changing them is an analyzer-version change.
 SEMANTIC_INDEX_AUDIT_WEIGHT = 0.40
 SEMANTIC_INDEX_META_WEIGHT = 0.25
 SEMANTIC_INDEX_FAR_WEIGHT = 0.20
@@ -43,6 +45,7 @@ def _symbol_refs(symbol: Symbol) -> set[str]:
 
 
 def _import_targets(raw: str) -> set[str]:
+    """Extract plausible module names from a static import statement/reference."""
     raw = raw.strip()
     targets = set(re.findall(r"[\"']([^\"']+)[\"']", raw))
     normalized = _normalize_target(raw)
@@ -285,7 +288,11 @@ def compute_semantic_metrics(graph: SemanticGraph) -> SemanticMetrics:
     audit = sum(symbol.category in {Category.AUDIT_PROVENANCE, Category.META_MACHINERY} for symbol in symbols)
     meta = sum(symbol.category == Category.META_MACHINERY for symbol in symbols)
     reachable = sum(symbol.value_distance is not None for symbol in symbols)
-    far = sum((symbol.value_distance or 0) >= 4 for symbol in symbols if symbol.value_distance is not None)
+    far = sum(
+        (symbol.value_distance or 0) >= 4
+        for symbol in symbols
+        if symbol.value_distance is not None and symbol.category in RECURSIVE_CATEGORIES
+    )
     max_distance = max((symbol.value_distance or 0 for symbol in symbols), default=0)
     max_recursive_depth = max((chain.depth for chain in graph.chains), default=0)
 

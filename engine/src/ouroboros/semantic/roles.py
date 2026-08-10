@@ -10,6 +10,11 @@ from ouroboros.scanner import ScannedFile
 from .model import SemanticGraph, Symbol, SymbolKind
 
 
+# These are intentionally conservative. A product can legitimately have runtime
+# concepts named "build", "pipeline", "receipt", "metrics", "verify", or
+# "bootstrap". Those words alone must not turn business logic into repository
+# machinery. Local machinery evidence is used mainly to split mixed-purpose files
+# that the file classifier already identified as machinery.
 ROLE_WORDS: dict[Category, set[str]] = {
     Category.META_MACHINERY: {"metaaudit", "auditofaudit", "auditquality", "reportvalidator"},
     Category.AUDIT_PROVENANCE: {"audit", "auditor", "provenance", "reconcile", "reconciliation", "traceability", "lineage"},
@@ -25,7 +30,7 @@ _PATH_STRONG_WORDS = {
     Category.TESTING: {"test", "tests", "spec", "specs", "fixtures"},
     Category.AUDIT_PROVENANCE: {"audit", "audits", "provenance"},
     Category.META_MACHINERY: {"metaaudit"},
-    Category.OBSERVABILITY: {"telemetry", "observability", "monitoring", "logging"},
+    Category.OBSERVABILITY: {"telemetry", "observability", "monitoring", "logging", "logger"},
     Category.VERIFICATION: {"verification", "validators", "validation"},
     Category.PROCESS_MACHINERY: {"workflow", "workflows", "ci", "cd", "deployment"},
     Category.DEVELOPER_TOOLING: {"scripts", "tools", "benchmarks", "probes"},
@@ -80,7 +85,23 @@ def _best_local(scores: dict[Category, float]) -> tuple[Category, float, float] 
 
 
 def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFile]) -> None:
-    """Refine mixed-purpose files without letting domain vocabulary hijack architecture."""
+    """Refine mixed-purpose files without letting domain vocabulary hijack architecture.
+
+    Rules are deliberately asymmetric:
+
+    * dedicated path roles (tests, audit folders, telemetry folders, workflows, tools)
+      are authoritative;
+    * a symbol in a product/support file stays product/support merely because its
+      business vocabulary says build/receipt/verify/pipeline/metrics/bootstrap;
+    * a neutral-path file that was classified as machinery may be mixed-purpose, so
+      only symbols with strong local machinery evidence retain a machinery role;
+      its other symbols fall back to product when the parent path is clearly product
+      source, otherwise to essential support.
+
+    This makes symbol refinement a correction mechanism rather than a second loose
+    keyword classifier layered on top of the first one.
+    """
+
     text_by_path = {item.component.path: item.text for item in scanned_files}
     for symbol in graph.symbols.values():
         if symbol.kind == SymbolKind.FILE:
@@ -101,6 +122,8 @@ def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFi
         snippet = "\n".join(lines[start:end])
         best = _best_local(_score_local(symbol, snippet))
 
+        # Product/support is sticky. Domain concepts frequently reuse machinery words,
+        # so lexical evidence alone is not allowed to promote them to machinery.
         if symbol.category not in MACHINERY_CATEGORIES:
             if best is not None:
                 best_category, score, second = best
@@ -113,6 +136,7 @@ def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFi
             symbol.role_source = "file-seed-preserved"
             continue
 
+        # Machinery-seeded neutral files are where local refinement earns its keep.
         if best is not None:
             best_category, score, second = best
             if best_category in MACHINERY_CATEGORIES and score >= 5.0 and score - second >= 0.5:

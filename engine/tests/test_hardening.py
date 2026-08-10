@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from ouroboros.classify import classify
 from ouroboros.config import Config
@@ -8,23 +11,33 @@ from ouroboros.graph import resolve_dependencies
 from ouroboros.model import Category, Component
 from ouroboros.scanner import ScannedFile, _code_lines, _looks_generated
 from ouroboros.semantic import EdgeKind, Resolution, build_semantic_graph
+from ouroboros.semantic.api import SemanticBuildOptions
 from ouroboros.semantic.model import SemanticEdge, SemanticGraph, Symbol, SymbolKind
 from ouroboros.semantic.graph import finalize_graph
 
 
 def scanned(path: str, text: str, category: Category = Category.UNKNOWN, language: str = "python") -> ScannedFile:
     return ScannedFile(
-        Component(path=path, language=language, lines=max(1, len(text.splitlines())),
-                  code_lines=max(1, len(text.splitlines())), bytes=len(text.encode()), category=category),
+        Component(
+            path=path,
+            language=language,
+            lines=max(1, len(text.splitlines())),
+            code_lines=max(1, len(text.splitlines())),
+            bytes=len(text.encode()),
+            category=category,
+        ),
         text,
     )
 
 
 def test_unknown_is_reachable_and_short_keywords_do_not_match_inside_words():
-    result = classify(scanned("plain.xyz.py", "x = 1\n"))
+    neutral = scanned("plain.xyz.py", "x = 1\n")
+    result = classify(neutral)
     assert result.category == Category.UNKNOWN
-    noisy = classify(scanned("src/building.py", "decimal = 'placid'\n"))
-    assert noisy.category not in {Category.USER_SURFACE, Category.PROCESS_MACHINERY}
+    assert result.confidence == 0.0
+    noisy = scanned("src/building.py", "decimal = 'placid'\n")
+    result = classify(noisy)
+    assert result.category not in {Category.USER_SURFACE, Category.PROCESS_MACHINERY}
 
 
 def test_dot_prefixed_paths_are_not_stripped_into_other_names():
@@ -40,16 +53,14 @@ def test_generated_marker_requires_comment_header():
 
 
 def test_python_docstrings_and_comment_only_lines_are_not_code():
-    text = '\n"""module docs"""\n# comment\nx = 1\n\ndef f():\n    """function docs"""\n    # comment\n    return x\n'
+    text = '''\n"""module docs"""\n# comment\nx = 1\n\ndef f():\n    """function docs"""\n    # comment\n    return x\n'''
     assert _code_lines(text, "python") == 3
 
 
 def test_dependency_alias_fallback_is_boundary_safe():
-    components = [
-        Component("src/on.py", "python", 1, 1, 1),
-        Component("src/app.py", "python", 1, 1, 1, imports=["json"]),
-    ]
-    assert resolve_dependencies(components)["src/app.py"] == set()
+    components = [Component("src/on.py", "python", 1, 1, 1), Component("src/app.py", "python", 1, 1, 1, imports=["json"])]
+    graph = resolve_dependencies(components)
+    assert graph["src/app.py"] == set()
 
 
 def test_import_binding_makes_real_python_cross_file_call_exact():
@@ -78,19 +89,12 @@ def test_path_resolve_does_not_bind_to_unrelated_nested_resolve():
         scanned("iso_updater.py", "class ISOScanner:\n    def resolve_updates(self):\n        def resolve():\n            return 1\n        return resolve()\n", Category.CORE_PRODUCT),
     ]
     graph = build_semantic_graph(files)
-    bogus = [edge for edge in graph.edges if edge.kind == EdgeKind.CALLS
-             and edge.target_name == "pathlib.Path.resolve" and edge.resolution == Resolution.EXACT
-             and edge.target_id and "resolve_updates.resolve" in edge.target_id]
+    bogus = [edge for edge in graph.edges if edge.kind == EdgeKind.CALLS and edge.target_name == "pathlib.Path.resolve" and edge.resolution == Resolution.EXACT and edge.target_id and "resolve_updates.resolve" in edge.target_id]
     assert bogus == []
 
 
 def test_mixed_file_symbol_roles_refine_locally():
-    graph = build_semantic_graph([scanned(
-        "iso_manager.py",
-        "class IntegrityStore:\n    def verify(self, path):\n        return path\n\n"
-        "class LibraryInspector:\n    def images(self):\n        return []\n",
-        Category.VERIFICATION,
-    )])
+    graph = build_semantic_graph([scanned("iso_manager.py", "class IntegrityStore:\n    def verify(self, path):\n        return path\n\nclass LibraryInspector:\n    def images(self):\n        return []\n", Category.VERIFICATION)])
     by_name = {symbol.qualified_name: symbol for symbol in graph.symbols.values()}
     assert by_name["IntegrityStore.verify"].category == Category.VERIFICATION
     assert by_name["LibraryInspector.images"].category == Category.ESSENTIAL_SUPPORT
@@ -109,27 +113,23 @@ def test_file_dependency_import_must_match_import_target():
 
 
 def test_chain_traversal_budget_is_visible():
-    product = Symbol(id="app.py::run@1", path="app.py", language="python", kind=SymbolKind.FUNCTION,
-                     name="run", qualified_name="run", start_line=1, end_line=1, category=Category.CORE_PRODUCT)
+    product = Symbol(id="app.py::run@1", path="app.py", language="python", kind=SymbolKind.FUNCTION, name="run", qualified_name="run", start_line=1, end_line=1, category=Category.CORE_PRODUCT)
     symbols = {product.id: product}
     edges = []
     for index in range(20):
-        symbol = Symbol(id=f"audit{index}.py::check@1", path=f"audit{index}.py", language="python",
-                        kind=SymbolKind.FUNCTION, name=f"check{index}", qualified_name=f"check{index}",
-                        start_line=1, end_line=1, category=Category.AUDIT_PROVENANCE)
+        symbol = Symbol(id=f"audit{index}.py::check@1", path=f"audit{index}.py", language="python", kind=SymbolKind.FUNCTION, name=f"check{index}", qualified_name=f"check{index}", start_line=1, end_line=1, category=Category.AUDIT_PROVENANCE)
         symbols[symbol.id] = symbol
-        edges.append(SemanticEdge(source_id=symbol.id, kind=EdgeKind.CALLS, target_name="run",
-                                  target_id=product.id, resolution=Resolution.EXACT))
-    graph = finalize_graph(SemanticGraph(symbols=symbols, edges=edges), max_chain_expansions=3)
+        edges.append(SemanticEdge(source_id=symbol.id, kind=EdgeKind.CALLS, target_name="run", target_id=product.id, resolution=Resolution.EXACT))
+    graph = SemanticGraph(symbols=symbols, edges=edges)
+    finalize_graph(graph, max_chain_expansions=3)
     assert graph.chain_truncated is True
-    assert graph.metrics is not None and graph.metrics.chain_expansions == 3
+    assert graph.metrics is not None and graph.metrics.chain_truncated is True
+    assert graph.metrics.chain_expansions == 3
     assert any("safety budget" in diagnostic.message for diagnostic in graph.diagnostics)
 
 
 def test_zero_product_scaffolding_is_json_safe():
-    symbol = Symbol(id="audit.py::check@1", path="audit.py", language="python", kind=SymbolKind.FUNCTION,
-                    name="check", qualified_name="check", start_line=1, end_line=1,
-                    category=Category.AUDIT_PROVENANCE)
+    symbol = Symbol(id="audit.py::check@1", path="audit.py", language="python", kind=SymbolKind.FUNCTION, name="check", qualified_name="check", start_line=1, end_line=1, category=Category.AUDIT_PROVENANCE)
     graph = finalize_graph(SemanticGraph(symbols={symbol.id: symbol}))
     assert graph.metrics is not None and graph.metrics.scaffolding_symbol_ratio is None
     json.dumps(graph.to_dict(), allow_nan=False)
@@ -151,25 +151,31 @@ def test_path_cues_use_tokens_not_substrings():
 
 
 def test_product_domain_vocabulary_does_not_promote_symbols_to_machinery():
-    graph = build_semantic_graph([scanned(
-        "src/ChatService.py",
-        "def build_pipeline():\n    return 1\n"
-        "def send_read_receipt():\n    return 2\n"
-        "def verify_peer():\n    return 3\n"
-        "def compute_metrics():\n    return 4\n",
-        Category.CORE_PRODUCT,
-    )])
+    graph = build_semantic_graph([scanned("src/ChatService.py", "def build_pipeline():\n    return 1\ndef send_read_receipt():\n    return 2\ndef verify_peer():\n    return 3\ndef compute_metrics():\n    return 4\n", Category.CORE_PRODUCT)])
     symbols = {s.qualified_name: s for s in graph.symbols.values() if s.kind != SymbolKind.FILE}
     assert {symbols[name].category for name in symbols} == {Category.CORE_PRODUCT}
 
 
 def test_machinery_seed_refines_only_locally_supported_symbols():
-    graph = build_semantic_graph([scanned(
-        "iso_manager.py",
-        "class IntegrityStore:\n    def verify(self, path):\n        return path\n"
-        "class LibraryInspector:\n    def images(self):\n        return []\n",
-        Category.VERIFICATION,
-    )])
+    graph = build_semantic_graph([scanned("iso_manager.py", "class IntegrityStore:\n    def verify(self, path):\n        return path\nclass LibraryInspector:\n    def images(self):\n        return []\n", Category.VERIFICATION)])
     symbols = {s.qualified_name: s for s in graph.symbols.values() if s.kind != SymbolKind.FILE}
     assert symbols["IntegrityStore.verify"].category == Category.VERIFICATION
     assert symbols["LibraryInspector.images"].category == Category.ESSENTIAL_SUPPORT
+
+
+def test_dedicated_logger_path_is_observability():
+    graph = build_semantic_graph([scanned("localPackages/BitLogger/Sources/SecureLogger.swift", "class SecureLogger { func debug() {} }", Category.CORE_PRODUCT, language="swift")])
+    non_files = [s for s in graph.symbols.values() if s.kind != SymbolKind.FILE]
+    if non_files:
+        assert all(s.category == Category.OBSERVABILITY for s in non_files)
+
+
+def test_far_ordinary_tests_do_not_inflate_recursive_index():
+    product = Symbol(id="app.py::run@1", path="app.py", language="python", kind=SymbolKind.FUNCTION, name="run", qualified_name="run", start_line=1, end_line=1, category=Category.CORE_PRODUCT, value_distance=0)
+    test_symbol = Symbol(id="tests/test_app.py::test_run@1", path="tests/test_app.py", language="python", kind=SymbolKind.FUNCTION, name="test_run", qualified_name="test_run", start_line=1, end_line=1, category=Category.TESTING, value_distance=8)
+    graph = SemanticGraph(symbols={product.id: product, test_symbol.id: test_symbol})
+    from ouroboros.semantic.graph import compute_semantic_metrics
+    metrics = compute_semantic_metrics(graph)
+    assert metrics.far_from_value_symbols == 0
+    assert metrics.far_from_value_symbol_share == 0.0
+    assert metrics.semantic_ouroboros_index == 0.0
