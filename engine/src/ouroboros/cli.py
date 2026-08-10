@@ -110,8 +110,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             "semantic": semantic.to_dict(),
         }
         target = Path(args.json_path).expanduser()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            print(f"Ouroboros could not write {target}: {exc}")
+            return 2
         if not args.quiet:
             print(f"\nFull JSON saved to: {target.resolve()}")
     return 0
