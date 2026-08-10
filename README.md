@@ -69,6 +69,25 @@ The default report is `ouroboros-evolution.html`. Comparison shows product/machi
 
 Analyzer version/source/settings and target repository SHAs are surfaced so a changed measuring instrument is not silently presented as repository evolution. See **[Software Evolution](docs/EVOLUTION.md)**.
 
+### Find structural neighbors in the Index
+
+Ouroboros 0.7 turns the public corpus into a structural-neighbor search surface:
+
+```bash
+ouroboros-neighbors corpus.jsonl --repo permissionlesstech/bitchat
+```
+
+Or compare a saved local scan to the corpus:
+
+```bash
+ouroboros /path/to/repo --canonical --json my-repo.json
+ouroboros-neighbors corpus.jsonl --scan my-repo.json --report
+```
+
+The default report is `ouroboros-neighborhood.html`. Neighbor distance compares code-purpose composition, symbol-role composition, exact recursive depth, Semantic Index, far-from-value share, and exact relationship coverage when coverage is meaningful. Every match exposes the per-dimension distance and weighted contribution so the ranking is inspectable.
+
+**Nearest means similar anatomy, not better code.** By default, other revisions of the same repository and incompatible measurement models are excluded. See **[Structural Neighbors](docs/STRUCTURAL_NEIGHBORS.md)** for the distance model and trust rules.
+
 ## Build public Index records
 
 Ouroboros 0.4 adds a reusable ingestion command for public GitHub repositories:
@@ -102,6 +121,22 @@ See **[Public Index ingestion](docs/INDEX_INGESTION.md)** for the record identit
 ## Start here
 
 **[Read the User Guide](docs/USER_GUIDE.md)** for what the analyzer numbers mean, what to look at first, configuration, supported languages, and how to avoid misreading the score.
+
+## What changed in 0.7
+
+0.7 makes the Index useful as a structural reference library instead of only a collection of individual measurements:
+
+- `ouroboros-neighbors` searches successful Index JSONL records for repositories with similar anatomy;
+- a normal saved scan can be used as the query, so a local repository can be compared to an existing corpus without rescanning the corpus;
+- structural distance is decomposed across code-purpose composition, symbol-role composition, recursive depth, Semantic Index, far-from-value share, and exact coverage;
+- missing exact coverage is excluded and remaining weights are renormalized instead of inventing certainty;
+- results expose the largest category differences and the contribution of every distance dimension;
+- same-repository revisions are excluded by default so the feature surfaces structural peers rather than obvious self-similarity;
+- semantic releases 0.3 through 0.7 are recognized as the same declared measurement generation while incompatible models/settings are excluded unless explicitly requested;
+- `--cross-model` permits investigative comparisons but visibly marks them non-comparable;
+- neighborhood JSON and self-contained HTML reports preserve provenance and contain no remote runtime dependencies;
+- structural distance is explicitly a resemblance metric, never a quality score or policy gate;
+- target repositories remain inert; neighbor search consumes already-produced measurements and executes no target code.
 
 ## What changed in 0.6
 
@@ -167,6 +202,6 @@ The semantic layer is **static-only**. Target repository code is treated as data
 
 ## The inaugural benchmark
 
-The frozen 0.1 cohort remains in [`results/inaugural-four/README.md`](results/inaugural-four/README.md). Semantic methodology is in [`results/inaugural-four/SEMANTIC.md`](results/inaugural-four/SEMANTIC.md) and [`docs/SEMANTIC_GRAPH.md`](docs/SEMANTIC_GRAPH.md).
+The frozen 0.1 cohort remains in [`results/inaugural-four/README.md`](results/inaugural-four/README.md). Semantic methodology is in [`results/inaugural-four/SEMANTIC.md`](docs/SEMANTIC_GRAPH.md) and [`docs/SEMANTIC_GRAPH.md`](docs/SEMANTIC_GRAPH.md).
 
 The historical 0.2 machine-readable semantic result remains at [`results/inaugural-four/semantic-index.json`](results/inaugural-four/semantic-index.json). The current 0.3 result is published separately at [`results/inaugural-four/semantic-index-0.3.json`](results/inaugural-four/semantic-index-0.3.json), preserving both analyzer generations instead of relabeling old data.
