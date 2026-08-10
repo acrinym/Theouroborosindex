@@ -253,6 +253,7 @@ def find_recursive_chains(graph: SemanticGraph, max_depth: int = 12, max_expansi
     for root in roots:
         if truncated:
             break
+        visited_states = set()
         walk(root, [root], [], {root})
 
     graph.chain_expansions = expansions
