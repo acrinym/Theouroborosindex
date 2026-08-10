@@ -30,6 +30,7 @@ jobs:
           ouroboros --version
           ouroboros-index --version
           ouroboros-compare --version
+          ouroboros-neighbors --version
 
   # The one intentional self-bite ran successfully on PR head
   # 382f274bc1782e8a84b95f9124792d388f991d00 (Actions run 31359852498).
