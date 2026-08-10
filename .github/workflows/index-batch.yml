@@ -1,0 +1,66 @@
+name: Bounded public Index batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: Target manifest in this repository
+        required: true
+        default: benchmarks/inaugural-four.json
+        type: string
+      max_targets:
+        description: Hard cap for this manual batch
+        required: true
+        default: "10"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  index-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ouroboros
+        run: python -m pip install --disable-pip-version-check ./engine
+      - name: Validate requested batch inputs
+        env:
+          MANIFEST: ${{ inputs.manifest }}
+          MAX_TARGETS: ${{ inputs.max_targets }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          manifest = Path(os.environ['MANIFEST'])
+          root = Path.cwd().resolve()
+          candidate = (root / manifest).resolve()
+          candidate.relative_to(root)
+          if not candidate.is_file():
+              raise SystemExit(f'Manifest does not exist: {manifest}')
+          limit = int(os.environ['MAX_TARGETS'])
+          if not 1 <= limit <= 25:
+              raise SystemExit('max_targets must be between 1 and 25 for the bounded Actions job')
+          PY
+      - name: Build canonical Index records
+        env:
+          MANIFEST: ${{ inputs.manifest }}
+          MAX_TARGETS: ${{ inputs.max_targets }}
+        run: |
+          mkdir -p out
+          ouroboros-index \
+            --manifest "$MANIFEST" \
+            --max-targets "$MAX_TARGETS" \
+            --analyzer-source-sha "$GITHUB_SHA" \
+            --output out/ouroboros-index.jsonl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ouroboros-index-${{ github.run_id }}
+          path: out/ouroboros-index.jsonl
+          if-no-files-found: error
+          retention-days: 30
