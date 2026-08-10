@@ -27,13 +27,13 @@ ouroboros C:\Repos\MyProject
 
 ### Make the result easy to explore
 
-Ouroboros 0.5 can turn the same scan into a self-contained **Repository Anatomy** report:
+Ouroboros 0.6 extends Repository Anatomy into a self-contained **Living Anatomy** report:
 
 ```bash
 ouroboros /path/to/repo --report
 ```
 
-That writes `ouroboros-report.html`. Open it in a browser to explore code composition, scaffolding inversions, deepest exact chains, relationship coverage, file classification reasons, and symbol-role evidence without digging through raw JSON.
+That writes `ouroboros-report.html`. Open it in a browser to explore a deterministic spatial repository map, anatomy fingerprint, code composition, scaffolding inversions, deepest exact chains, relationship coverage, file classification reasons, and symbol-role evidence without digging through raw JSON.
 
 Choose a report path explicitly with:
 
@@ -41,7 +41,7 @@ Choose a report path explicitly with:
 ouroboros /path/to/repo --report out/my-repo.html
 ```
 
-The report loads no remote scripts, fonts, styles, analytics, or telemetry. See **[Repository Anatomy](docs/REPOSITORY_ANATOMY.md)** for the full surface.
+The map drills through `directory → file → symbol → evidence` using the same classifications and canonical topology as the rest of the analyzer. The report loads no remote scripts, fonts, styles, analytics, or telemetry. See **[Repository Anatomy](docs/REPOSITORY_ANATOMY.md)** for the full surface.
 
 Save the full machine-readable result with:
 
@@ -50,6 +50,24 @@ ouroboros /path/to/repo --json ouroboros.json
 ```
 
 Use `--canonical` if you want the same rule as the public Index: ignore any `.ouroboros.json` supplied by the repository being measured.
+
+### Compare two saved scans
+
+Ouroboros 0.6 adds the first software-evolution surface without crawling Git history:
+
+```bash
+ouroboros-compare before.json after.json
+```
+
+Create both machine-readable comparison data and a self-contained evolution report with:
+
+```bash
+ouroboros-compare before.json after.json --json comparison.json --report
+```
+
+The default report is `ouroboros-evolution.html`. Comparison shows product/machinery movement, category deltas, scaffold/product change, recursive-depth and Semantic Index change, exact-coverage change, inversion hotspots, deepest exact-chain changes, anatomy fingerprints, and scaffolding crossovers.
+
+Analyzer version/source/settings and target repository SHAs are surfaced so a changed measuring instrument is not silently presented as repository evolution. See **[Software Evolution](docs/EVOLUTION.md)**.
 
 ## Build public Index records
 
@@ -84,6 +102,24 @@ See **[Public Index ingestion](docs/INDEX_INGESTION.md)** for the record identit
 ## Start here
 
 **[Read the User Guide](docs/USER_GUIDE.md)** for what the analyzer numbers mean, what to look at first, configuration, supported languages, and how to avoid misreading the score.
+
+## What changed in 0.6
+
+0.6 makes repository anatomy spatial and gives Ouroboros its first useful form of memory without changing the underlying measurement rules:
+
+- Repository Anatomy gains a deterministic directory/file map where file area follows code-line mass;
+- inversion regions, deepest exact-chain files, category identity, and canonical value distance are visible in the map;
+- map interactions drill into the existing file/symbol evidence rather than creating a second truth system;
+- every scan carries a multidimensional anatomy fingerprint instead of a new scalar ranking score;
+- `ouroboros-compare` compares two existing scan JSON files without crawling Git history;
+- comparison reports product/machinery movement, category deltas, scaffold/product change, recursive depth, Semantic Index, exact coverage, inversion changes, deepest exact-chain changes, and crossovers;
+- structural-change explanations remain descriptive rather than moralizing;
+- scan identity records analyzer version/source, canonical setting, and statically discoverable target SHA where available;
+- analyzer/version/settings mismatches are disclosed instead of pretending a comparison is perfectly like-for-like;
+- zero semantic relationships continue to produce `n/a` coverage rather than vacuous certainty;
+- target repositories remain inert static input and canonical topology remains EXACT-only.
+
+0.6 intentionally does **not** add automatic Git-history crawling, commit bisection, policy gates, a leaderboard, recurring self-analysis, or the parked Nibbles-style progress snake.
 
 ## What changed in 0.5
 
