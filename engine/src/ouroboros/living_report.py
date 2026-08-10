@@ -57,6 +57,18 @@ def _living_css() -> str:
 .map-inversion > rect { stroke:var(--warn); stroke-dasharray:7 4; stroke-width:2px; }
 .map-file { cursor:pointer; }
 .map-file > rect { stroke:#0a0e13; vector-effect:non-scaling-stroke; opacity:.94; }
+.repo-map .cat-core-product > rect { fill:#2f8f72; }
+.repo-map .cat-user-surface > rect { fill:#57b894; }
+.repo-map .cat-essential-support > rect { fill:#4f7fab; }
+.repo-map .cat-testing > rect { fill:#a987db; }
+.repo-map .cat-developer-tooling > rect { fill:#d59a55; }
+.repo-map .cat-observability > rect { fill:#d0709c; }
+.repo-map .cat-verification > rect { fill:#c9ad54; }
+.repo-map .cat-audit-provenance > rect { fill:#d26969; }
+.repo-map .cat-process-machinery > rect { fill:#b85f7b; }
+.repo-map .cat-meta-machinery > rect { fill:#a54f4f; }
+.repo-map .cat-documentation > rect { fill:#6f7b87; }
+.repo-map .cat-unknown > rect { fill:#4a5058; }
 .map-file:hover > rect, .map-file:focus > rect { stroke:#fff; opacity:1; }
 .map-chain > rect { stroke:var(--accent-2); stroke-dasharray:4 3; }
 .repo-map-detail { border:1px solid var(--line); border-radius:12px; padding:14px; min-height:420px; overflow:auto; }
