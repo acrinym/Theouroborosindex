@@ -116,6 +116,7 @@ def find_audit_chains(
     for root in components:
         if root.category not in PRODUCT_CATEGORIES or truncated:
             continue
+        visited_states = set()
         stack: list[tuple[str, list[str]]] = [(root.path, [root.path])]
         while stack and not truncated:
             current, path = stack.pop()
