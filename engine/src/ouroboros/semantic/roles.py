@@ -45,7 +45,11 @@ _PRODUCT_PARENT_WORDS = {
 
 def _tokens(value: str) -> set[str]:
     value = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
-    return set(re.findall(r"[a-z0-9]+", value.lower().replace("_", " ").replace("-", " ")))
+    parts = re.findall(r"[a-z0-9]+", value.lower().replace("_", " ").replace("-", " "))
+    tokens = set(parts)
+    tokens.update("".join(parts[index:index + 2]) for index in range(len(parts) - 1))
+    tokens.update("".join(parts[index:index + 3]) for index in range(len(parts) - 2))
+    return tokens
 
 
 def _path_role(path: str) -> Category | None:
