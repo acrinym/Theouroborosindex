@@ -1,11 +1,12 @@
 {
   "name": "Ouroboros",
-  "version": "0.1.0",
-  "source_repository": "acrinym/Secretprojects",
-  "source_path": "Ouroboros/",
-  "source_head": "8ae603829e5ca4be7b0961a5d9dd5d20393b837d",
-  "reconstructed_modules": {
-    "classify.py": "6f465f358cb62c7fa7f1e721e587fbbd66c3222d",
-    "graph.py": "2bee4deec6682716cc4a5180337bb756b681387b"
-  }
+  "version": "0.3.0",
+  "source_model": "direct-package-source",
+  "lineage": {
+    "original_repository": "acrinym/Secretprojects",
+    "original_path": "Ouroboros/",
+    "original_pr": 66,
+    "original_merge_commit": "8dd80c3a0755f6990c8461e30c73b27b2f62d7f8"
+  },
+  "notes": "0.3 is maintained directly in Theouroborosindex. The old split-part transport files are no longer runtime source."
 }

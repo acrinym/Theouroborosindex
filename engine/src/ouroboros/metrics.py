@@ -19,6 +19,12 @@ def _ratio(numerator: float, denominator: float) -> float:
     return 0.0 if denominator <= 0 else numerator / denominator
 
 
+def _optional_ratio(numerator: float, denominator: float) -> float | None:
+    if denominator > 0:
+        return numerator / denominator
+    return None if numerator > 0 else 0.0
+
+
 def compute_metrics(components: list[Component], audit_chains: list[AuditChain]) -> Metrics:
     code_components = [c for c in components if c.category != Category.DOCUMENTATION]
     total = sum_code_lines(code_components)
@@ -41,10 +47,9 @@ def compute_metrics(components: list[Component], audit_chains: list[AuditChain])
     meta_share = _ratio(meta, total)
     assurance_ratio = _ratio(assurance, essential)
     audit_ratio = _ratio(audit, total)
-    scaffolding_ratio = _ratio(machinery, product)
+    scaffolding_ratio = _optional_ratio(machinery, product)
     far_share = _ratio(far, total)
 
-    # Descriptive 0-100 signal, never a moral quality grade.
     ouroboros = 100.0 * min(
         1.0,
         (0.40 * audit_ratio)

@@ -1,6 +1,12 @@
 """Ouroboros repository-composition analyzer."""
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .analyze import analyze_repository
 
 __all__ = ["analyze_repository"]
-__version__ = "0.1.0"
+
+try:
+    __version__ = version("repo-ouroboros")
+except PackageNotFoundError:
+    __version__ = "0.3.0.dev0"

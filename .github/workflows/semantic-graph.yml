@@ -2,11 +2,9 @@ name: Ouroboros semantic graph
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,34 +13,69 @@ permissions:
 jobs:
   semantic-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Materialize frozen 0.1 runtime
-        run: |
-          cat engine/parts/classify.py.part0 engine/parts/classify.py.part1 > engine/src/ouroboros/classify.py
-          cat engine/parts/graph.py.part0 engine/parts/graph.py.part1 > engine/src/ouroboros/graph.py
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install semantic engine
+      - name: Install Ouroboros
         run: python -m pip install --disable-pip-version-check -e 'engine[test]'
-      - name: Verify parser capability
-        run: |
-          python - <<'PY'
-          from tree_sitter_language_pack import get_parser
-          for language in ('csharp', 'javascript', 'typescript', 'java', 'go', 'rust', 'cpp'):
-              parser = get_parser(language)
-              assert parser is not None, language
-          print('Tree-sitter parser capability verified.')
-          PY
-      - name: Compile and test semantic graph
+      - name: Compile and test
         run: |
           python -m compileall -q engine/src engine/tests
           python -m pytest -q engine/tests
+          ouroboros --version
+
+  bite-tail-once:
+    if: github.event_name == 'pull_request'
+    needs: semantic-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ouroboros
+        run: python -m pip install --disable-pip-version-check -e engine
+      - name: Bite the tail exactly once
+        run: |
+          mkdir -p out
+          ouroboros . --canonical --quiet --json out/self-bite.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('out/self-bite.json').read_text())
+          metrics = result['semantic']['metrics']
+          assert result['analyzer']['version'].startswith('0.3.')
+          assert metrics['symbol_count'] > 0
+          assert metrics['chain_truncated'] is False
+          assert all(chain.get('canonical_resolution') == 'exact' for chain in result['semantic']['chains'])
+          Path('out/summary.txt').write_text(
+              f"Product symbols: {metrics['direct_product_symbol_share']*100:.1f}%\n"
+              f"Machinery symbols: {metrics['machinery_symbol_share']*100:.1f}%\n"
+              f"Recursive depth: {metrics['max_recursive_depth']}\n"
+              f"Semantic Index: {metrics['semantic_ouroboros_index']:.2f}\n"
+          )
+          print(Path('out/summary.txt').read_text())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ouroboros-self-bite-once
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
 
   semantic-inaugural-four:
     needs: semantic-tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -60,9 +93,10 @@ jobs:
             sha: c599b3102900f20f66c48dff2b4562d07ddd52cf
             slug: ryos
     steps:
-      - name: Checkout index
+      - name: Checkout Index analyzer
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: index
       - name: Checkout target at frozen SHA
         uses: actions/checkout@v4
@@ -74,62 +108,41 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install semantic engine
+      - name: Install current semantic engine
         run: python -m pip install --disable-pip-version-check -e index/engine
-      - name: Materialize verified 0.1 classifier dependency
-        run: |
-          cat index/engine/parts/classify.py.part0 index/engine/parts/classify.py.part1 > index/engine/src/ouroboros/classify.py
-          cat index/engine/parts/graph.py.part0 index/engine/parts/graph.py.part1 > index/engine/src/ouroboros/graph.py
-          python -m compileall -q index/engine/src
-      - name: Crawl real source structure
+      - name: Analyze frozen target without executing it
         env:
           TARGET_REPO: ${{ matrix.target.repo }}
           TARGET_SHA: ${{ matrix.target.sha }}
-          TARGET_SLUG: ${{ matrix.target.slug }}
         run: |
           mkdir -p out
-          python - <<'PY'
+          ouroboros target --canonical --quiet --json out/scan.json
+          ANALYZER_SHA="$(git -C index rev-parse HEAD)" python - <<'PY'
           import json, os
           from pathlib import Path
-          from ouroboros.classify import classify
-          from ouroboros.config import load_config
-          from ouroboros.graph import resolve_dependencies
-          from ouroboros.scanner import scan_repository
-          from ouroboros.semantic import build_semantic_graph
 
-          root = Path('target').resolve()
-          config = load_config(root)
-          scanned = [item for item in scan_repository(root) if not config.ignored(item.component.path)]
-          components = [classify(item, override=config.category_for(item.component.path)) for item in scanned]
-          file_graph = resolve_dependencies(components)
-          semantic = build_semantic_graph(scanned, file_dependencies=file_graph)
-          metrics = semantic.metrics
-          assert metrics is not None
-
-          payload = {
-              'repository': os.environ['TARGET_REPO'],
-              'sha': os.environ['TARGET_SHA'],
-              'analyzer': {
-                  'name': 'Ouroboros',
-                  'version': '0.2.0-semantic',
-                  'baseline': '0.1.0',
-                  'parser': 'tree-sitter-language-pack==1.13.3',
-                  'canonical_topology': 'exact-edges-only',
-                  'semantic_index_formula': 'same weights as 0.1 applied to symbol audit/meta share + exact graph distance/depth',
-              },
-              'metrics': metrics.to_dict(),
-              'diagnostics': [d.to_dict() for d in semantic.diagnostics],
-              'deepest_chains': [c.to_dict() for c in semantic.chains[:10]],
-              'symbol_sample': [s.to_dict() for s in list(semantic.symbols.values())[:100]],
-          }
-          Path('out/semantic.json').write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
-          print(json.dumps({'repository': payload['repository'], **payload['metrics'], 'diagnostics': len(payload['diagnostics'])}, indent=2))
+          path = Path('out/scan.json')
+          payload = json.loads(path.read_text())
+          payload['repository_name'] = os.environ['TARGET_REPO']
+          payload['repository_sha'] = os.environ['TARGET_SHA']
+          payload['analyzer']['source_head'] = os.environ['ANALYZER_SHA']
+          path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + '\n')
+          m = payload['semantic']['metrics']
+          print(json.dumps({
+              'repository': payload['repository_name'],
+              'source_head': payload['analyzer']['source_head'],
+              'symbols': m['symbol_count'],
+              'product_symbols': m['direct_product_symbol_share'],
+              'machinery_symbols': m['machinery_symbol_share'],
+              'exact_resolution_rate': m['exact_resolution_rate'],
+              'depth': m['max_recursive_depth'],
+              'index': m['semantic_ouroboros_index'],
+          }, indent=2))
           PY
-      - name: Upload semantic result
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: semantic-${{ matrix.target.slug }}
-          path: out/
+          path: out/scan.json
           if-no-files-found: error
           retention-days: 30
 
@@ -146,21 +159,29 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          rows = [json.loads(path.read_text()) for path in Path('artifacts').glob('*/semantic.json')]
+
+          rows = [json.loads(path.read_text()) for path in Path('artifacts').glob('*/scan.json')]
           if len(rows) != 4:
               raise SystemExit(f'Expected four semantic records, found {len(rows)}')
-          rows.sort(key=lambda row: row['metrics']['semantic_ouroboros_index'], reverse=True)
+          rows.sort(key=lambda row: row['semantic']['metrics']['semantic_ouroboros_index'], reverse=True)
           Path('aggregate').mkdir()
-          Path('aggregate/semantic-inaugural-four.json').write_text(json.dumps(rows, indent=2, sort_keys=True) + '\n')
-          print('| Repository | Symbols | Exact | Resolvable | Product symbols | Machinery symbols | Scaffold/Product | Far >=4 | Depth | Semantic Index |')
-          print('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
+          Path('aggregate/semantic-inaugural-four-0.3.json').write_text(
+              json.dumps(rows, indent=2, sort_keys=True, allow_nan=False) + '\n'
+          )
+          print('| Repository | Symbols | Product | Machinery | Exact | Resolvable | Depth | Semantic Index |')
+          print('|---|---:|---:|---:|---:|---:|---:|---:|')
           for row in rows:
-              m = row['metrics']
-              print(f"| {row['repository']} | {m['symbol_count']} | {m['exact_resolution_rate']*100:.1f}% | {m['resolution_rate']*100:.1f}% | {m['direct_product_symbol_share']*100:.1f}% | {m['machinery_symbol_share']*100:.1f}% | {m['scaffolding_symbol_ratio']:.2f}:1 | {m['far_from_value_symbol_share']*100:.1f}% | {m['max_recursive_depth']} | {m['semantic_ouroboros_index']:.1f} |")
+              m = row['semantic']['metrics']
+              print(
+                  f"| {row['repository_name']} | {m['symbol_count']} | "
+                  f"{m['direct_product_symbol_share']*100:.1f}% | {m['machinery_symbol_share']*100:.1f}% | "
+                  f"{m['exact_resolution_rate']*100:.1f}% | {m['resolution_rate']*100:.1f}% | "
+                  f"{m['max_recursive_depth']} | {m['semantic_ouroboros_index']:.1f} |"
+              )
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: semantic-inaugural-four
+          name: semantic-inaugural-four-0.3
           path: aggregate/
           if-no-files-found: error
           retention-days: 30

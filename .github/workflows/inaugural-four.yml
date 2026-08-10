@@ -1,184 +1,31 @@
-name: Ouroboros inaugural four
+name: Frozen Ouroboros 0.1 corpus
 
 on:
-  push:
-    branches:
-      - agent/inaugural-four-index-20260807
-    paths:
-      - '.github/workflows/inaugural-four.yml'
-      - 'benchmarks/inaugural-four.json'
-      - 'engine/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  analyze:
-    name: Analyze ${{ matrix.slug }}
+  validate-frozen-corpus:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - slug: bitchat
-            repo: permissionlesstech/bitchat
-            sha: 1f59e814f90c3f489f48d68262cb1bf640bf6181
-            stars: 34736
-          - slug: git-city
-            repo: srizzon/git-city
-            sha: bb4d9102af6126970bbce1fb3e20d818df4a535f
-            stars: 5750
-          - slug: deepseek-ocr-app
-            repo: rdumasia303/deepseek_ocr_app
-            sha: 3dac0741b18afc934c063e8528e7576f4d63efe5
-            stars: 1887
-          - slug: ryos
-            repo: ryokun6/ryos
-            sha: c599b3102900f20f66c48dff2b4562d07ddd52cf
-            stars: 1223
-
     steps:
-      - name: Checkout index
-        uses: actions/checkout@v4
-        with:
-          path: index
-
-      - name: Checkout target at frozen SHA
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ matrix.repo }}
-          ref: ${{ matrix.sha }}
-          path: target
-          fetch-depth: 1
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Reconstruct and verify exact Ouroboros source
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat index/engine/parts/classify.py.part0 index/engine/parts/classify.py.part1 > index/engine/src/ouroboros/classify.py
-          cat index/engine/parts/graph.py.part0 index/engine/parts/graph.py.part1 > index/engine/src/ouroboros/graph.py
-          python - <<'PY'
-          import hashlib
-          from pathlib import Path
-          expected = {
-              '__init__.py': '877fea5537cdf0ece777c663ff5f0edee05a57b9',
-              'analyze.py': '4f7bf572968d2a624e0363a96932566151d58323',
-              'classify.py': '6f465f358cb62c7fa7f1e721e587fbbd66c3222d',
-              'config.py': 'b0f9378c325f78bc0182423ef0a4e4f998eedaab',
-              'graph.py': '2bee4deec6682716cc4a5180337bb756b681387b',
-              'metrics.py': '8adf2dceb46d65c351751c7feadd6549e2a56aef',
-              'model.py': '1371c1f72d8587de6f77f1ee365fcc57bc5244db',
-              'profiles.py': '76cd56beee58465eb841f0e962d2a4819ccb8a60',
-              'scanner.py': 'b4944a779d009d3d939345c8d3d1c22ba569b0c5',
-          }
-          root = Path('index/engine/src/ouroboros')
-          for name, want in expected.items():
-              data = (root / name).read_bytes()
-              actual = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
-              if actual != want:
-                  raise SystemExit(f'{name}: {actual} != {want}')
-          print('Exact Ouroboros source verified against original Git blob IDs.')
-          PY
-          python -m compileall -q index/engine/src
-
-      - name: Analyze repository
-        shell: bash
-        env:
-          PYTHONPATH: index/engine/src
-          TARGET_REPO: ${{ matrix.repo }}
-          TARGET_SHA: ${{ matrix.sha }}
-          TARGET_SLUG: ${{ matrix.slug }}
-          TARGET_STARS: ${{ matrix.stars }}
-        run: |
-          set -euo pipefail
-          mkdir -p out
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          from ouroboros.analyze import analyze_repository
-
-          analysis = analyze_repository('target')
-          payload = analysis.to_dict()
-          Path('out/analysis.json').write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
-          m = analysis.metrics
-          record = {
-              'repository': os.environ['TARGET_REPO'],
-              'sha': os.environ['TARGET_SHA'],
-              'stars_at_scan': int(os.environ['TARGET_STARS']),
-              'analyzer': {'name':'Ouroboros','version':'0.1.0','source_head':'8ae603829e5ca4be7b0961a5d9dd5d20393b837d'},
-              'metrics': m.to_dict(),
-              'warnings': analysis.warnings,
-              'audit_chains': [c.to_dict() for c in analysis.audit_chains],
-              'directory_profiles': [p.to_dict() for p in analysis.directory_profiles[:30]],
-          }
-          Path('out/record.json').write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
-          lines = [
-              f"Repository: {record['repository']} @ {record['sha']}",
-              f"Direct product: {m.direct_product_share*100:.1f}%",
-              f"Product + essential: {m.product_plus_essential_share*100:.1f}%",
-              f"Tooling: {m.tooling_share*100:.1f}%",
-              f"Audit: {m.audit_ratio*100:.1f}%",
-              f"Meta-machinery: {m.meta_machinery_share*100:.1f}%",
-              f"Scaffolding/product: {m.scaffolding_ratio:.2f}:1",
-              f"Maximum audit depth: {m.max_audit_depth}",
-              f"Ouroboros Index: {m.ouroboros_index:.1f}/100",
-              '', 'Warnings:', *(analysis.warnings or ['none']),
-          ]
-          Path('out/analysis.txt').write_text('\n'.join(lines) + '\n')
-          print('\n'.join(lines))
-          PY
-
-      - name: Upload result bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: ouroboros-${{ matrix.slug }}
-          path: out/
-          if-no-files-found: error
-          retention-days: 30
-
-  aggregate:
-    name: Aggregate inaugural benchmark
-    needs: analyze
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Download result bundles
-        uses: actions/download-artifact@v4
-        with:
-          pattern: ouroboros-*
-          path: artifacts
-
-      - name: Build leaderboard
-        shell: bash
+      - name: Validate frozen inaugural records
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          records=[json.loads(p.read_text()) for p in Path('artifacts').glob('*/record.json')]
-          if len(records) != 4:
-              raise SystemExit(f'Expected 4 complete records, found {len(records)}')
-          records.sort(key=lambda r:r['metrics']['ouroboros_index'], reverse=True)
-          Path('aggregate').mkdir()
-          Path('aggregate/inaugural-four.json').write_text(json.dumps(records, indent=2, sort_keys=True)+'\n')
-          lines=['# Inaugural Ouroboros benchmark','', '| Repository | Product | Product+essential | Tooling | Audit | Meta | Scaffold/Product | Depth | Ouroboros |','|---|---:|---:|---:|---:|---:|---:|---:|---:|']
-          for r in records:
-              m=r['metrics']
-              lines.append(f"| {r['repository']} | {m['direct_product_share']*100:.1f}% | {m['product_plus_essential_share']*100:.1f}% | {m['tooling_share']*100:.1f}% | {m['audit_ratio']*100:.1f}% | {m['meta_machinery_share']*100:.1f}% | {m['scaffolding_ratio']:.2f}:1 | {m['max_audit_depth']} | {m['ouroboros_index']:.1f} |")
-          Path('aggregate/README.md').write_text('\n'.join(lines)+'\n')
-          print('\n'.join(lines))
-          PY
 
-      - name: Upload aggregate
-        uses: actions/upload-artifact@v4
-        with:
-          name: ouroboros-inaugural-four
-          path: aggregate/
-          if-no-files-found: error
-          retention-days: 30
+          benchmark = json.loads(Path('benchmarks/inaugural-four.json').read_text())
+          records = json.loads(Path('results/inaugural-four/index.json').read_text())
+          assert len(benchmark) == 4
+          assert len(records) == 4
+          frozen = {(row['repository'], row['sha']) for row in benchmark}
+          published = {(row['repository'], row['sha']) for row in records}
+          assert frozen == published
+          print('Frozen 0.1 inaugural corpus is internally consistent.')
+          PY

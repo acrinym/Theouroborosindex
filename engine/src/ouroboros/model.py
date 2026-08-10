@@ -122,7 +122,7 @@ class Metrics:
     meta_machinery_share: float
     assurance_ratio: float
     audit_ratio: float
-    scaffolding_ratio: float
+    scaffolding_ratio: float | None
     far_from_value_share: float
     max_audit_depth: int
     ouroboros_index: float
@@ -140,7 +140,7 @@ class DirectoryProfile:
     essential_lines: int
     machinery_lines: int
     tooling_share: float
-    scaffolding_ratio: float
+    scaffolding_ratio: float | None
 
     @property
     def is_inversion(self) -> bool:

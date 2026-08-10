@@ -53,6 +53,8 @@ class Symbol:
     parent_id: str | None = None
     category: Category = Category.UNKNOWN
     value_distance: int | None = None
+    role_confidence: float = 0.0
+    role_source: str = "file-seed"
 
     def to_dict(self) -> dict:
         data = asdict(self)
@@ -116,11 +118,13 @@ class SemanticMetrics:
     machinery_symbol_share: float
     audit_symbol_share: float
     meta_symbol_share: float
-    scaffolding_symbol_ratio: float
+    scaffolding_symbol_ratio: float | None
     far_from_value_symbol_share: float
     resolution_rate: float
     exact_resolution_rate: float
     semantic_ouroboros_index: float
+    chain_expansions: int = 0
+    chain_truncated: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -153,6 +157,8 @@ class SemanticGraph:
     diagnostics: list[ParseDiagnostic] = field(default_factory=list)
     chains: list[SemanticChain] = field(default_factory=list)
     metrics: SemanticMetrics | None = None
+    chain_expansions: int = 0
+    chain_truncated: bool = False
 
     def add_symbols(self, symbols: Iterable[Symbol]) -> None:
         for symbol in symbols:

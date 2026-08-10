@@ -24,6 +24,7 @@ def directory_profiles(components: list[Component], max_depth: int = 3, min_code
         product = sum(c.code_lines for c in members if c.category in PRODUCT_CATEGORIES)
         essential = sum(c.code_lines for c in members if c.category in ESSENTIAL_CATEGORIES)
         machinery = sum(c.code_lines for c in members if c.category in MACHINERY_CATEGORIES)
+        scaffolding = machinery / product if product else (None if machinery else 0.0)
         profiles.append(DirectoryProfile(
             path=path,
             code_lines=code,
@@ -31,7 +32,7 @@ def directory_profiles(components: list[Component], max_depth: int = 3, min_code
             essential_lines=essential,
             machinery_lines=machinery,
             tooling_share=machinery / code if code else 0.0,
-            scaffolding_ratio=machinery / product if product else (float("inf") if machinery else 0.0),
+            scaffolding_ratio=scaffolding,
         ))
     profiles.sort(key=lambda p: (p.is_inversion, p.tooling_share, p.code_lines), reverse=True)
     return profiles

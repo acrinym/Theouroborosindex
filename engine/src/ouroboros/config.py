@@ -7,26 +7,31 @@ from pathlib import Path
 from .model import Category
 
 
+def _normalize(value: str) -> str:
+    normalized = value.replace("\\", "/")
+    return normalized.removeprefix("./").rstrip("/")
+
+
 @dataclass(slots=True)
 class Config:
     overrides: dict[str, Category] = field(default_factory=dict)
     ignore: tuple[str, ...] = ()
 
     def category_for(self, relative_path: str) -> Category | None:
-        normalized = relative_path.replace("\\", "/").lstrip("./")
+        normalized = _normalize(relative_path)
         best: tuple[int, Category] | None = None
         for prefix, category in self.overrides.items():
-            candidate = prefix.replace("\\", "/").lstrip("./")
-            if normalized == candidate or normalized.startswith(candidate.rstrip("/") + "/"):
+            candidate = _normalize(prefix)
+            if normalized == candidate or normalized.startswith(candidate + "/"):
                 length = len(candidate)
                 if best is None or length > best[0]:
                     best = (length, category)
         return best[1] if best else None
 
     def ignored(self, relative_path: str) -> bool:
-        normalized = relative_path.replace("\\", "/").lstrip("./")
+        normalized = _normalize(relative_path)
         return any(
-            normalized == prefix.lstrip("./") or normalized.startswith(prefix.rstrip("/").lstrip("./") + "/")
+            normalized == _normalize(prefix) or normalized.startswith(_normalize(prefix) + "/")
             for prefix in self.ignore
         )
 

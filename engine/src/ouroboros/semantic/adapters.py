@@ -7,15 +7,7 @@ from typing import Protocol
 from ouroboros.model import Category
 from ouroboros.scanner import ScannedFile
 
-from .model import (
-    EdgeKind,
-    ParseDiagnostic,
-    ParsedUnit,
-    Resolution,
-    SemanticEdge,
-    Symbol,
-    SymbolKind,
-)
+from .model import EdgeKind, ParseDiagnostic, ParsedUnit, Resolution, SemanticEdge, Symbol, SymbolKind
 
 
 def _file_id(path: str) -> str:
@@ -56,9 +48,21 @@ class PythonAstAdapter:
                 message=f"Python AST parse failed at line {exc.lineno}: {exc.msg}",
             ))
             return unit
+        except (ValueError, RecursionError) as exc:
+            unit.diagnostics.append(ParseDiagnostic(
+                path=item.component.path, language="python",
+                message=f"Python AST parse failed: {type(exc).__name__}: {exc}",
+            ))
+            return unit
 
         visitor = _PythonVisitor(item, unit, file_symbol.id)
-        visitor.visit(tree)
+        try:
+            visitor.visit(tree)
+        except RecursionError as exc:
+            unit.diagnostics.append(ParseDiagnostic(
+                path=item.component.path, language="python",
+                message=f"Python AST traversal depth exceeded: {exc}",
+            ))
         return unit
 
 
@@ -74,6 +78,7 @@ class _PythonVisitor(ast.NodeVisitor):
         self.item = item
         self.unit = unit
         self.scopes: list[_Scope] = [_Scope(file_symbol_id, "", SymbolKind.FILE)]
+        self.import_bindings: dict[str, str] = {}
 
     @property
     def scope(self) -> _Scope:
@@ -121,7 +126,7 @@ class _PythonVisitor(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         symbol = self._add_symbol(node, node.name, SymbolKind.CLASS)
         for base in node.bases:
-            target = _python_expr_name(base)
+            target = self._bound_name(_python_expr_name(base))
             if target:
                 self.unit.edges.append(SemanticEdge(
                     source_id=symbol.id, kind=EdgeKind.INHERITS, target_name=target,
@@ -133,6 +138,8 @@ class _PythonVisitor(ast.NodeVisitor):
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
+            local = alias.asname or alias.name.split(".", 1)[0]
+            self.import_bindings[local] = alias.name
             self.unit.edges.append(SemanticEdge(
                 source_id=_file_id(self.item.component.path), kind=EdgeKind.IMPORTS,
                 target_name=alias.name, evidence="python AST import",
@@ -144,13 +151,29 @@ class _PythonVisitor(ast.NodeVisitor):
             source_id=_file_id(self.item.component.path), kind=EdgeKind.IMPORTS,
             target_name=module or ".", evidence="python AST from-import",
         ))
+        if node.module:
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                local = alias.asname or alias.name
+                self.import_bindings[local] = f"{node.module}.{alias.name}"
+
+    def _bound_name(self, target: str | None) -> str | None:
+        if not target:
+            return target
+        head, sep, tail = target.partition(".")
+        bound = self.import_bindings.get(head)
+        if not bound:
+            return target
+        return bound + (f".{tail}" if sep else "")
 
     def visit_Call(self, node: ast.Call) -> None:
-        target = _python_expr_name(node.func)
+        target = self._bound_name(_python_expr_name(node.func))
         if target:
             self.unit.edges.append(SemanticEdge(
                 source_id=self.scope.symbol_id, kind=EdgeKind.CALLS,
-                target_name=target, evidence="python AST call",
+                target_name=target,
+                evidence="python AST call" + (" with import binding" if "." in target else ""),
             ))
         self.generic_visit(node)
 
@@ -163,25 +186,16 @@ def _python_expr_name(node: ast.AST) -> str | None:
         return f"{base}.{node.attr}" if base else node.attr
     if isinstance(node, ast.Subscript):
         return _python_expr_name(node.value)
+    if isinstance(node, ast.Call):
+        return _python_expr_name(node.func)
     return None
 
 
 TREE_SITTER_LANGUAGE_KEYS = {
-    "javascript": "javascript",
-    "typescript": "typescript",
-    "csharp": "csharp",
-    "fsharp": "fsharp",
-    "java": "java",
-    "kotlin": "kotlin",
-    "go": "go",
-    "rust": "rust",
-    "ruby": "ruby",
-    "php": "php",
-    "c": "c",
-    "cpp": "cpp",
-    "swift": "swift",
-    "lua": "lua",
-    "powershell": "powershell",
+    "javascript": "javascript", "typescript": "typescript", "tsx": "tsx",
+    "csharp": "csharp", "fsharp": "fsharp", "java": "java", "kotlin": "kotlin",
+    "go": "go", "rust": "rust", "ruby": "ruby", "php": "php", "c": "c",
+    "cpp": "cpp", "swift": "swift", "lua": "lua", "powershell": "powershell",
     "shell": "bash",
 }
 
@@ -194,16 +208,14 @@ _CALL_TYPES = {
     "call", "call_expression", "function_call_expression", "invocation_expression",
     "method_invocation", "member_call_expression", "command_invocation",
 }
-_IMPORT_HINTS = ("import", "using_directive", "use_declaration", "include")
+_IMPORT_NODE_TYPES = {
+    "import_statement", "import_declaration", "using_directive", "use_declaration",
+    "preproc_include", "include_statement", "open_declaration",
+}
 
 
 class TreeSitterAdapter:
-    """Tree-sitter-backed structural adapter for the scanner's non-Python code languages.
-
-    The adapter is deliberately grammar-tolerant: it uses node field names when grammars
-    expose them and conservative node-type semantics otherwise. Unknown constructs remain
-    unresolved rather than being guessed into the graph.
-    """
+    MAX_WALK_DEPTH = 400
 
     def supports(self, language: str) -> bool:
         return language in TREE_SITTER_LANGUAGE_KEYS
@@ -234,10 +246,25 @@ class TreeSitterAdapter:
                 path=item.component.path, language=item.component.language,
                 message="tree-sitter parsed the file with syntax errors; partial graph retained",
             ))
-        self._walk(item, source, tree.root_node, unit, file_symbol)
+        depth_flag = [False]
+        try:
+            self._walk(item, source, tree.root_node, unit, file_symbol, 0, depth_flag)
+        except RecursionError as exc:
+            unit.diagnostics.append(ParseDiagnostic(
+                path=item.component.path, language=item.component.language,
+                message=f"tree-sitter traversal recursion limit reached: {exc}",
+            ))
+        if depth_flag[0]:
+            unit.diagnostics.append(ParseDiagnostic(
+                path=item.component.path, language=item.component.language,
+                message=f"tree-sitter traversal truncated at depth {self.MAX_WALK_DEPTH}", severity="info",
+            ))
         return unit
 
-    def _walk(self, item: ScannedFile, source: bytes, node, unit: ParsedUnit, scope: Symbol) -> None:
+    def _walk(self, item: ScannedFile, source: bytes, node, unit: ParsedUnit, scope: Symbol, depth: int, depth_flag: list[bool]) -> None:
+        if depth >= self.MAX_WALK_DEPTH:
+            depth_flag[0] = True
+            return
         node_type = node.type.lower()
 
         if self._is_import(node_type):
@@ -247,6 +274,7 @@ class TreeSitterAdapter:
                     source_id=_file_id(item.component.path), kind=EdgeKind.IMPORTS,
                     target_name=_compact_reference(text), evidence=f"tree-sitter {node.type}",
                 ))
+            return
 
         if self._is_call(node_type):
             target_node = (
@@ -286,11 +314,11 @@ class TreeSitterAdapter:
                 ))
                 self._add_bases(source, node, unit, symbol)
                 for child in node.named_children:
-                    self._walk(item, source, child, unit, symbol)
+                    self._walk(item, source, child, unit, symbol, depth + 1, depth_flag)
                 return
 
         for child in node.named_children:
-            self._walk(item, source, child, unit, scope)
+            self._walk(item, source, child, unit, scope, depth + 1, depth_flag)
 
     @staticmethod
     def _is_call(node_type: str) -> bool:
@@ -298,7 +326,7 @@ class TreeSitterAdapter:
 
     @staticmethod
     def _is_import(node_type: str) -> bool:
-        return any(hint in node_type for hint in _IMPORT_HINTS) and not node_type.endswith("clause")
+        return node_type in _IMPORT_NODE_TYPES
 
     @staticmethod
     def _declaration_kind(node_type: str) -> SymbolKind | None:
@@ -306,28 +334,17 @@ class TreeSitterAdapter:
             return None
         if not any(hint in node_type for hint in _DECLARATION_HINTS):
             return None
-        if "namespace" in node_type:
-            return SymbolKind.NAMESPACE
-        if "module" in node_type:
-            return SymbolKind.MODULE
-        if "interface" in node_type:
-            return SymbolKind.INTERFACE
-        if "struct" in node_type or "record" in node_type:
-            return SymbolKind.STRUCT
-        if "enum" in node_type:
-            return SymbolKind.ENUM
-        if "trait" in node_type:
-            return SymbolKind.TRAIT
-        if "class" in node_type:
-            return SymbolKind.CLASS
-        if "constructor" in node_type:
-            return SymbolKind.CONSTRUCTOR
-        if "method" in node_type:
-            return SymbolKind.METHOD
-        if "property" in node_type:
-            return SymbolKind.PROPERTY
-        if "function" in node_type:
-            return SymbolKind.FUNCTION
+        if "namespace" in node_type: return SymbolKind.NAMESPACE
+        if "module" in node_type: return SymbolKind.MODULE
+        if "interface" in node_type: return SymbolKind.INTERFACE
+        if "struct" in node_type or "record" in node_type: return SymbolKind.STRUCT
+        if "enum" in node_type: return SymbolKind.ENUM
+        if "trait" in node_type: return SymbolKind.TRAIT
+        if "class" in node_type: return SymbolKind.CLASS
+        if "constructor" in node_type: return SymbolKind.CONSTRUCTOR
+        if "method" in node_type: return SymbolKind.METHOD
+        if "property" in node_type: return SymbolKind.PROPERTY
+        if "function" in node_type: return SymbolKind.FUNCTION
         return SymbolKind.TYPE
 
     @staticmethod
@@ -346,34 +363,28 @@ class TreeSitterAdapter:
 
 
 def _node_text(source: bytes, node) -> str:
-    if node is None:
-        return ""
+    if node is None: return ""
     return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
 
 
 def _first_named_child(node):
-    for child in node.named_children:
-        return child
+    for child in node.named_children: return child
     return None
 
 
 def _first_identifier_child(node):
     for child in node.named_children:
         lowered = child.type.lower()
-        if "identifier" in lowered or lowered in {"name", "type_identifier"}:
-            return child
+        if "identifier" in lowered or lowered in {"name", "type_identifier"}: return child
         if child.start_byte < node.start_byte + 256:
             nested = _first_identifier_child(child)
-            if nested is not None:
-                return nested
+            if nested is not None: return nested
     return None
 
 
 def _compact_reference(text: str) -> str:
     text = " ".join(text.replace("\n", " ").split())
-    if len(text) > 180:
-        text = text[:177] + "..."
-    return text
+    return text[:177] + "..." if len(text) > 180 else text
 
 
 class AdapterRegistry:
@@ -382,8 +393,7 @@ class AdapterRegistry:
 
     def adapter_for(self, language: str) -> LanguageAdapter | None:
         for adapter in self.adapters:
-            if adapter.supports(language):
-                return adapter
+            if adapter.supports(language): return adapter
         return None
 
     @property

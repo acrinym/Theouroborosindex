@@ -1,49 +1,45 @@
-# Semantic Code Graph
+# Semantic Graph Contract
 
-Ouroboros 0.2 adds a language-neutral source graph beneath the repository-composition metrics. The baseline 0.1 file/LOC benchmark remains frozen so later semantic results can be compared with it.
+Ouroboros 0.3 keeps the frozen file/LOC composition view and adds a language-neutral static source graph for functions, methods, types, imports, calls, inheritance, and implementation relationships.
 
-## Invariant: target code is data
+## Trust rule
 
-Indexing does **not execute target repository code**. Ouroboros parses source statically. It does not run `npm install`, `pip install`, `dotnet build`, project tests, repository hooks, shell scripts, or target binaries. The parser dependency belongs to Ouroboros, not to the repository being measured.
+Target code is data. Ouroboros never executes the repository being measured.
 
-## Graph model
+Canonical topology uses **EXACT** relationships only. Probable and unresolved relationships remain visible for coverage and diagnosis but cannot create product reachability, Distance From Value, recursive depth, or the semantic Index.
 
-Each adapter emits the same vocabulary:
+### Exact proof became stricter in 0.3
 
-- symbols: file, namespace/module, class/interface/struct/enum/trait, function, method, constructor, property;
-- relationships: contains, calls, imports, inherits, implements, references;
-- resolution: exact, probable, unresolved;
-- source location and inherited repository-composition category for every symbol.
+A matching name is not enough.
 
-Ouroboros resolves relationships across files, computes graph reachability from product symbols, assigns symbol-level Distance From Value, and walks reverse dependencies to expose real recursive machinery chains. An unresolved dynamic call remains unresolved; the Index does not invent a target to make the graph look complete.
+- Same-scope and unambiguous same-file bare references can be exact.
+- A bare name in another file is at most probable, even if it is unique.
+- Qualified references may be exact when their module/type qualification matches a local symbol.
+- Python import aliases are preserved, so `from physics import resolve; resolve()` becomes a qualified `physics.resolve` reference.
+- `Path(...).resolve()` imported from `pathlib` therefore remains `pathlib.Path.resolve`; it cannot silently bind to some unrelated local function named `resolve`.
+- File import edges must match the import target as well as a dependency candidate. The dependency set alone cannot fabricate an exact import.
+- A bare same-name match across languages is never exact.
 
-### Canonical topology uses exact edges only
+## Symbol-local roles
 
-A probable relationship is evidence, not fact. Probable and unresolved edges stay in the graph and contribute to coverage statistics, but only `exact` relationships may:
+0.2 inherited every symbol role from its containing file. That overclassified mixed-purpose modules.
 
-- make a symbol product-reachable;
-- change Distance From Value;
-- create or lengthen a recursive machinery chain;
-- contribute to canonical semantic depth or semantic Index.
+0.3 retains strong file/path evidence for clearly dedicated areas such as tests, audit files, workflows, or GUI surfaces, then refines neutral mixed-purpose files at symbol level. Strong names and local bodies can identify verification, audit, observability, tooling, user-surface, or essential-support behavior independently.
 
-A bare name match across programming languages is never exact. If a C# symbol happens to share a name with a Python symbol, for example, that textual coincidence remains `probable` at most. A canonical cross-language edge needs stronger evidence such as an explicit file dependency or a specialized adapter that understands the bridge.
+This means an `IntegrityStore.verify()` method can remain verification while an unrelated `LibraryInspector.images()` method in the same module can be essential support.
 
-The report exposes both an exact-resolution rate and an exact+probable resolvable rate. This prevents common-name guesses in large or polyglot repositories from manufacturing deep Ouroboros chains.
+## Bounded traversal
 
-### Category seed versus topology
+File-level and semantic recursive-chain searches have explicit expansion budgets. If a graph reaches the limit, the result reports truncation rather than pretending its observed maximum depth is complete.
 
-The 0.2 foundation inherits a symbol's initial composition category from its containing file so its topology can be compared directly with the frozen 0.1 classifier. The **structure is symbol-level now; the initial role label remains the 0.1 category seed**. A later symbol-role refinement can classify mixed-purpose methods/functions independently without changing the graph contract or rewriting the historical baseline.
+## Coverage
 
-## Language adapters
+The semantic report exposes exact relationship rate, exact + probable resolvable rate, parser diagnostics, product-reachable symbols, far-from-value share, recursive depth, and whether traversal was truncated.
 
-Python uses the standard-library `ast` parser. The scanner's other executable source languages use `tree-sitter-language-pack` through one grammar-tolerant adapter. That gives the Index a plugin boundary without forking its scoring model per language. The initial registry covers Python, JavaScript, TypeScript, C#, F#, Java, Kotlin, Go, Rust, Ruby, PHP, C, C++, Swift, Lua, PowerShell, and shell/Bash.
+Low coverage is uncertainty, not a low-score guarantee.
 
-Language-specific adapters can later replace generic Tree-sitter extraction where a language needs deeper semantics—for example C# solution/project references, DI registration, ASP.NET routes, partial types, generated source, or proven cross-language bindings. They still emit the same graph contract.
+## Version policy
 
-## Semantic Index constants
+The semantic Index weights are fixed public constants for an analyzer version. Changing the scoring formula, trust semantics, or role model requires an analyzer-version change so corpus records remain reproducible.
 
-The semantic Index uses the same transparent conceptual weights as the 0.1 Index, applied to symbol audit/meta share plus exact graph distance/depth. The weights are named public constants in `semantic/graph.py` and are fixed for an analyzer version. They are deliberately **not per-repository configuration**, so a repository cannot tune the scoring recipe to improve its own result. Changing the weights is an analyzer-version change and requires corpus provenance to record that version.
-
-## Why both LOC and graph metrics stay
-
-LOC describes repository mass. The semantic graph describes architectural role and connectivity. A huge isolated fixture can therefore remain large in LOC while having little graph centrality, while a small function reached from many product surfaces can be structurally important. The Index reports both rather than collapsing them into one opaque quality grade.
+0.3 is such a version change: symbol-local roles and stricter exact-resolution semantics intentionally mean old 0.2 semantic scores are historical rather than directly interchangeable.

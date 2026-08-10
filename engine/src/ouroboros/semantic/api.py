@@ -5,13 +5,15 @@ from dataclasses import dataclass
 from ouroboros.scanner import ScannedFile
 
 from .adapters import AdapterRegistry
-from .graph import finalize_graph
+from .graph import DEFAULT_CHAIN_EXPANSION_BUDGET, finalize_graph
 from .model import ParseDiagnostic, SemanticGraph
+from .roles import refine_symbol_categories
 
 
 @dataclass(slots=True)
 class SemanticBuildOptions:
     fail_on_missing_adapter: bool = False
+    max_chain_expansions: int = DEFAULT_CHAIN_EXPANSION_BUDGET
 
 
 def build_semantic_graph(
@@ -37,9 +39,23 @@ def build_semantic_graph(
                 severity="info",
             ))
             continue
-        unit = adapter.parse(item)
+        try:
+            unit = adapter.parse(item)
+        except Exception as exc:
+            graph.diagnostics.append(ParseDiagnostic(
+                path=item.component.path,
+                language=item.component.language,
+                message=f"Semantic adapter failed: {type(exc).__name__}: {exc}",
+                severity="error",
+            ))
+            continue
         graph.add_symbols(unit.symbols)
         graph.edges.extend(unit.edges)
         graph.diagnostics.extend(unit.diagnostics)
 
-    return finalize_graph(graph, file_dependencies=file_dependencies)
+    refine_symbol_categories(graph, scanned_files)
+    return finalize_graph(
+        graph,
+        file_dependencies=file_dependencies,
+        max_chain_expansions=options.max_chain_expansions,
+    )
