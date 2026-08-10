@@ -334,17 +334,28 @@ class TreeSitterAdapter:
             return None
         if not any(hint in node_type for hint in _DECLARATION_HINTS):
             return None
-        if "namespace" in node_type: return SymbolKind.NAMESPACE
-        if "module" in node_type: return SymbolKind.MODULE
-        if "interface" in node_type: return SymbolKind.INTERFACE
-        if "struct" in node_type or "record" in node_type: return SymbolKind.STRUCT
-        if "enum" in node_type: return SymbolKind.ENUM
-        if "trait" in node_type: return SymbolKind.TRAIT
-        if "class" in node_type: return SymbolKind.CLASS
-        if "constructor" in node_type: return SymbolKind.CONSTRUCTOR
-        if "method" in node_type: return SymbolKind.METHOD
-        if "property" in node_type: return SymbolKind.PROPERTY
-        if "function" in node_type: return SymbolKind.FUNCTION
+        if "namespace" in node_type:
+            return SymbolKind.NAMESPACE
+        if "module" in node_type:
+            return SymbolKind.MODULE
+        if "interface" in node_type:
+            return SymbolKind.INTERFACE
+        if "struct" in node_type or "record" in node_type:
+            return SymbolKind.STRUCT
+        if "enum" in node_type:
+            return SymbolKind.ENUM
+        if "trait" in node_type:
+            return SymbolKind.TRAIT
+        if "class" in node_type:
+            return SymbolKind.CLASS
+        if "constructor" in node_type:
+            return SymbolKind.CONSTRUCTOR
+        if "method" in node_type:
+            return SymbolKind.METHOD
+        if "property" in node_type:
+            return SymbolKind.PROPERTY
+        if "function" in node_type:
+            return SymbolKind.FUNCTION
         return SymbolKind.TYPE
 
     @staticmethod
@@ -363,22 +374,26 @@ class TreeSitterAdapter:
 
 
 def _node_text(source: bytes, node) -> str:
-    if node is None: return ""
+    if node is None:
+        return ""
     return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
 
 
 def _first_named_child(node):
-    for child in node.named_children: return child
+    for child in node.named_children:
+        return child
     return None
 
 
 def _first_identifier_child(node):
     for child in node.named_children:
         lowered = child.type.lower()
-        if "identifier" in lowered or lowered in {"name", "type_identifier"}: return child
+        if "identifier" in lowered or lowered in {"name", "type_identifier"}:
+            return child
         if child.start_byte < node.start_byte + 256:
             nested = _first_identifier_child(child)
-            if nested is not None: return nested
+            if nested is not None:
+                return nested
     return None
 
 
@@ -393,7 +408,8 @@ class AdapterRegistry:
 
     def adapter_for(self, language: str) -> LanguageAdapter | None:
         for adapter in self.adapters:
-            if adapter.supports(language): return adapter
+            if adapter.supports(language):
+                return adapter
         return None
 
     @property
