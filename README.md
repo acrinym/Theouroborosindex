@@ -25,6 +25,24 @@ On Windows PowerShell:
 ouroboros C:\Repos\MyProject
 ```
 
+### Make the result easy to explore
+
+Ouroboros 0.5 can turn the same scan into a self-contained **Repository Anatomy** report:
+
+```bash
+ouroboros /path/to/repo --report
+```
+
+That writes `ouroboros-report.html`. Open it in a browser to explore code composition, scaffolding inversions, deepest exact chains, relationship coverage, file classification reasons, and symbol-role evidence without digging through raw JSON.
+
+Choose a report path explicitly with:
+
+```bash
+ouroboros /path/to/repo --report out/my-repo.html
+```
+
+The report loads no remote scripts, fonts, styles, analytics, or telemetry. See **[Repository Anatomy](docs/REPOSITORY_ANATOMY.md)** for the full surface.
+
 Save the full machine-readable result with:
 
 ```bash
@@ -66,6 +84,21 @@ See **[Public Index ingestion](docs/INDEX_INGESTION.md)** for the record identit
 ## Start here
 
 **[Read the User Guide](docs/USER_GUIDE.md)** for what the analyzer numbers mean, what to look at first, configuration, supported languages, and how to avoid misreading the score.
+
+## What changed in 0.5
+
+0.5 makes the existing analysis substantially easier to understand without changing the measurement rules:
+
+- `ouroboros --report` writes a self-contained interactive HTML Repository Anatomy view;
+- a plain-language summary explains the result while keeping machinery share and recursive depth as separate axes;
+- category composition shows where repository code mass actually went;
+- scaffolding inversion hotspots identify directories where machinery has overtaken direct product code;
+- deepest canonical chains expose the exact symbols, locations, relationship types, and retained structural evidence behind recursive-depth claims;
+- trust and coverage makes exact, probable, unresolved, warning, and parser-error counts visible beside the conclusions;
+- file evidence exposes classifier signals, confidence, imports, resolved dependencies, and value distance;
+- symbol evidence exposes role source, confidence, source location, and canonical value distance;
+- large evidence sets are bounded in the HTML surface while complete raw records remain available through `--json`;
+- the report has no remote runtime dependencies or telemetry.
 
 ## What changed in 0.4
 
