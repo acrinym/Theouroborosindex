@@ -69,6 +69,28 @@ The default report is `ouroboros-evolution.html`. Comparison shows product/machi
 
 Analyzer version/source/settings and target repository SHAs are surfaced so a changed measuring instrument is not silently presented as repository evolution. See **[Software Evolution](docs/EVOLUTION.md)**.
 
+### Locate when the structure changed
+
+Ouroboros 0.8 adds bounded local Git-history analysis:
+
+```bash
+ouroboros-history /path/to/repo --from v1.0.0 --to HEAD
+```
+
+Write JSON and a self-contained timeline report with:
+
+```bash
+ouroboros-history /path/to/repo \
+  --from v1.0.0 \
+  --to HEAD \
+  --json ouroboros-history.json \
+  --report
+```
+
+History mode scans **every first-parent commit** in the explicit range using canonical static snapshots from `git archive`. It identifies repository balance shifts, directory product→machinery crossovers, and exact recursive-depth changes. The default bound is 50 commits and the hard maximum is 200; an oversized range is refused rather than sampled and presented as exact.
+
+Historical target code, hooks, package managers, builds, and tests are never executed. See **[Bounded History](docs/BOUNDED_HISTORY.md)** for traversal and trust boundaries.
+
 ### Find structural neighbors in the Index
 
 Ouroboros 0.7 turns the public corpus into a structural-neighbor search surface:
@@ -121,6 +143,25 @@ See **[Public Index ingestion](docs/INDEX_INGESTION.md)** for the record identit
 ## Start here
 
 **[Read the User Guide](docs/USER_GUIDE.md)** for what the analyzer numbers mean, what to look at first, configuration, supported languages, and how to avoid misreading the score.
+
+## What changed in 0.8
+
+0.8 adds a deliberately bounded temporal surface instead of turning Ouroboros into a general history crawler:
+
+- `ouroboros-history` scans an explicit local Git range from `--from` through `--to`;
+- traversal is first-parent, inclusive, and unsampled so an identified change point corresponds to an actually scanned commit;
+- the default bound is 50 commits and the hard maximum is 200;
+- oversized ranges fail instead of silently sampling checkpoints;
+- historical source trees are transported with `git archive` into temporary inert snapshots rather than checked out into the target worktree;
+- canonical measurement is forced across the whole range so repository-authored overrides cannot change the measuring instrument between commits;
+- repository-level product/machinery dominance shifts are pinned to the commit where the observed balance changes;
+- existing directory crossover semantics are reused between adjacent commits rather than inventing a second crossover model;
+- exact recursive-depth changes are pinned to the later commit in each adjacent pair;
+- compact checkpoints retain commit provenance, anatomy fingerprint, composition, depth, Semantic Index, exact coverage, inversions, archive counts, and diagnostics;
+- JSON and a self-contained HTML timeline report are available;
+- target code, hooks, builds, package managers, tests, and network activity remain outside the history scan path.
+
+0.8 intentionally does **not** add remote crawling, scheduled scans, commit sampling disguised as exactness, a server/database, policy gates, or autonomous drone support. 🤣
 
 ## What changed in 0.7
 
@@ -202,6 +243,6 @@ The semantic layer is **static-only**. Target repository code is treated as data
 
 ## The inaugural benchmark
 
-The frozen 0.1 cohort remains in [`results/inaugural-four/README.md`](results/inaugural-four/README.md). Semantic methodology is in [`results/inaugural-four/SEMANTIC.md`](docs/SEMANTIC_GRAPH.md) and [`docs/SEMANTIC_GRAPH.md`](docs/SEMANTIC_GRAPH.md).
+The frozen 0.1 cohort remains in [`results/inaugural-four/README.md`](results/inaugural-four/README.md). Semantic methodology is in [`results/inaugural-four/SEMANTIC.md`](results/inaugural-four/SEMANTIC.md) and [`docs/SEMANTIC_GRAPH.md`](docs/SEMANTIC_GRAPH.md).
 
 The historical 0.2 machine-readable semantic result remains at [`results/inaugural-four/semantic-index.json`](results/inaugural-four/semantic-index.json). The current 0.3 result is published separately at [`results/inaugural-four/semantic-index-0.3.json`](results/inaugural-four/semantic-index-0.3.json), preserving both analyzer generations instead of relabeling old data.
