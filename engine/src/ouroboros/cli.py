@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any, Sequence
 
 from . import __version__
 from .analyze import analyze_repository
+from .anatomy import anatomy_fingerprint
 from .classify import classify
 from .config import Config, load_config
 from .graph import resolve_dependencies
-from .report import write_report
+from .identity import static_git_sha
+from .living_report import write_living_report
 from .scanner import scan_repository
 from .semantic import build_semantic_graph
 
@@ -62,7 +65,7 @@ def _friendly_summary(path: Path, baseline, semantic) -> str:
             lines.append(f"  - Semantic parser diagnostics: {error_count} error(s), {warning_count} warning(s).")
     lines.extend([
         "",
-        "Tip: use --report for a self-contained Repository Anatomy view with exact-chain and classification evidence.",
+        "Tip: use --report for Living Repository Anatomy: a spatial map, fingerprint, exact chains, and classification evidence.",
     ])
     return "\n".join(lines)
 
@@ -78,6 +81,30 @@ def scan(path: str | Path, *, use_repo_config: bool = True) -> tuple[Any, Any]:
     return baseline, semantic
 
 
+def _analyzer_source_sha() -> str | None:
+    value = (os.environ.get("OUROBOROS_ANALYZER_SOURCE_SHA") or os.environ.get("GITHUB_SHA") or "").strip()
+    if len(value) == 40 and all(char in "0123456789abcdefABCDEF" for char in value):
+        return value.lower()
+    return None
+
+
+def _scan_payload(root: Path, baseline, semantic, *, canonical: bool) -> dict:
+    return {
+        "schema": {"name": "ouroboros-scan", "version": 2},
+        "analyzer": {"name": "Ouroboros", "version": __version__, "source_sha": _analyzer_source_sha()},
+        "repository": str(root),
+        "repository_identity": {"git_sha": static_git_sha(root)},
+        "scan": {
+            "canonical": canonical,
+            "target_execution": False,
+            "relationship_topology": "exact-only",
+        },
+        "fingerprint": anatomy_fingerprint(baseline, semantic),
+        "baseline": baseline.to_dict(),
+        "semantic": semantic.to_dict(),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ouroboros",
@@ -91,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         const="ouroboros-report.html",
         metavar="HTML",
-        help="Write a self-contained Repository Anatomy HTML report (default: ouroboros-report.html)",
+        help="Write a self-contained Living Repository Anatomy HTML report (default: ouroboros-report.html)",
     )
     parser.add_argument("--quiet", action="store_true", help="Suppress the friendly text summary")
     parser.add_argument("--canonical", action="store_true", help="Ignore repo-authored .ouroboros.json overrides, like the public Index")
@@ -112,12 +139,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_friendly_summary(root, baseline, semantic))
 
     if args.json_path:
-        payload = {
-            "analyzer": {"name": "Ouroboros", "version": __version__},
-            "repository": str(root),
-            "baseline": baseline.to_dict(),
-            "semantic": semantic.to_dict(),
-        }
+        payload = _scan_payload(root, baseline, semantic, canonical=args.canonical)
         target = Path(args.json_path).expanduser()
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -133,12 +155,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.report_path:
         try:
-            report_path = write_report(root, baseline, semantic, args.report_path)
+            report_path = write_living_report(root, baseline, semantic, args.report_path)
         except (OSError, ValueError) as exc:
             print(f"Ouroboros could not write report {args.report_path}: {exc}")
             return 2
         if not args.quiet:
-            print(f"\nRepository Anatomy report saved to: {report_path}")
+            print(f"\nLiving Repository Anatomy report saved to: {report_path}")
 
     return 0
 
