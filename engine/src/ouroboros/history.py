@@ -336,6 +336,7 @@ def scan_history(
                 events.extend(history_events(previous_payload, payload, previous_meta, metadata))
             previous_payload = payload
             previous_meta = metadata
+            shutil.rmtree(commit_dir, ignore_errors=True)
 
     return {
         "schema": {"name": "ouroboros-history", "version": 1},
