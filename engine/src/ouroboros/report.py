@@ -112,7 +112,11 @@ def _summary_sentences(baseline: Analysis, semantic: SemanticGraph) -> list[str]
             f"Deep recursive machinery is present: the deepest exact semantic chain reaches depth {sm.max_recursive_depth}."
         )
 
-    if sm.exact_resolution_rate < 0.35:
+    if sm.relationship_count == 0:
+        sentences.append(
+            "No semantic relationships were observed, so relationship-resolution coverage is not meaningful for this scan."
+        )
+    elif sm.exact_resolution_rate < 0.35:
         sentences.append(
             "Exact relationship coverage is limited, so the semantic topology should be read conservatively."
         )
@@ -437,6 +441,23 @@ def build_report_html(repository: str | Path, baseline: Analysis, semantic: Sema
     exact_width = _share(exact, relationships) * 100
     probable_width = _share(probable, relationships) * 100
     unresolved_width = _share(unresolved, relationships) * 100
+    if relationships == 0:
+        relationship_coverage = '<p class="good-note">No semantic relationships were observed; resolution percentages are not meaningful for this scan.</p>'
+    else:
+        relationship_coverage = f"""
+  <div class="relationship-bar" aria-label="Relationship resolution">
+    <div class="exact-segment" style="width:{exact_width:.5f}%" title="Exact: {exact:,}"></div>
+    <div class="probable-segment" style="width:{probable_width:.5f}%" title="Probable: {probable:,}"></div>
+    <div class="unresolved-segment" style="width:{unresolved_width:.5f}%" title="Unresolved: {unresolved:,}"></div>
+  </div>
+  <div class="relationship-legend">
+    <span><strong>{exact:,}</strong> exact ({_pct(_share(exact, relationships))})</span>
+    <span><strong>{probable:,}</strong> probable ({_pct(_share(probable, relationships))})</span>
+    <span><strong>{unresolved:,}</strong> unresolved ({_pct(_share(unresolved, relationships))})</span>
+    <span><strong>{diagnostic_counts.get("error", 0)}</strong> parser errors</span>
+    <span><strong>{diagnostic_counts.get("warning", 0)}</strong> parser warnings</span>
+  </div>
+"""
 
     return f"""<!doctype html>
 <html lang="en">
@@ -629,7 +650,7 @@ details[open] > summary::before {{ transform: rotate(90deg); }}
 .filter-button.active {{ outline: 2px solid var(--accent); outline-offset: 1px; }}
 .evidence-card summary {{
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto auto auto;
+  grid-template-columns: auto minmax(260px, 1fr) auto auto auto auto;
 }}
 .evidence-body {{ padding: 0 16px 15px; display: grid; gap: 8px; }}
 .diagnostic {{
@@ -653,7 +674,7 @@ details[open] > summary::before {{ transform: rotate(90deg); }}
 @media (max-width: 980px) {{
   .cards {{ grid-template-columns: repeat(3, 1fr); }}
   .grid-2 {{ grid-template-columns: 1fr; }}
-  .evidence-card summary {{ grid-template-columns: 1fr auto; }}
+  .evidence-card summary {{ grid-template-columns: auto 1fr auto; }}
   .evidence-card summary > span:nth-child(n+3) {{ display: none; }}
 }}
 @media (max-width: 560px) {{
@@ -681,7 +702,7 @@ details[open] > summary::before {{ transform: rotate(90deg); }}
   <div class="card"><div class="label">Scaffold / product</div><div class="value">{_ratio(baseline.metrics.scaffolding_ratio)}</div><div class="muted">file/code view</div></div>
   <div class="card"><div class="label">Recursive depth</div><div class="value">{sm.max_recursive_depth}</div><div class="muted">exact semantic chains</div></div>
   <div class="card"><div class="label">Semantic Index</div><div class="value">{sm.semantic_ouroboros_index:.1f}</div><div class="muted">out of 100</div></div>
-  <div class="card"><div class="label">Exact coverage</div><div class="value">{_pct(sm.exact_resolution_rate)}</div><div class="muted">{exact:,} exact relationships</div></div>
+  <div class="card"><div class="label">Exact coverage</div><div class="value">{"n/a" if relationships == 0 else _pct(sm.exact_resolution_rate)}</div><div class="muted">{exact:,} exact relationships</div></div>
 </section>
 
 <section class="panel read-first">
@@ -733,18 +754,7 @@ details[open] > summary::before {{ transform: rotate(90deg); }}
 <section class="panel">
   <h2>Trust and coverage</h2>
   <p class="section-note">How much structural relationship evidence the semantic graph could resolve.</p>
-  <div class="relationship-bar" aria-label="Relationship resolution">
-    <div class="exact-segment" style="width:{exact_width:.5f}%" title="Exact: {exact:,}"></div>
-    <div class="probable-segment" style="width:{probable_width:.5f}%" title="Probable: {probable:,}"></div>
-    <div class="unresolved-segment" style="width:{unresolved_width:.5f}%" title="Unresolved: {unresolved:,}"></div>
-  </div>
-  <div class="relationship-legend">
-    <span><strong>{exact:,}</strong> exact ({_pct(_share(exact, relationships))})</span>
-    <span><strong>{probable:,}</strong> probable ({_pct(_share(probable, relationships))})</span>
-    <span><strong>{unresolved:,}</strong> unresolved ({_pct(_share(unresolved, relationships))})</span>
-    <span><strong>{diagnostic_counts.get("error", 0)}</strong> parser errors</span>
-    <span><strong>{diagnostic_counts.get("warning", 0)}</strong> parser warnings</span>
-  </div>
+  {relationship_coverage}
   <div style="margin-top:16px">{_diagnostics(semantic, baseline)}</div>
 </section>
 
