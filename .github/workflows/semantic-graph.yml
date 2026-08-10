@@ -29,6 +29,7 @@ jobs:
           python -m pytest -q engine/tests
           ouroboros --version
           ouroboros-index --version
+          ouroboros-compare --version
 
   # The one intentional self-bite ran successfully on PR head
   # 382f274bc1782e8a84b95f9124792d388f991d00 (Actions run 31359852498).
@@ -78,8 +79,9 @@ jobs:
           TARGET_SHA: ${{ matrix.target.sha }}
         run: |
           mkdir -p out
-          ouroboros target --canonical --quiet --json out/scan.json
-          ANALYZER_SHA="$(git -C index rev-parse HEAD)" python - <<'PY'
+          ANALYZER_SHA="$(git -C index rev-parse HEAD)"
+          OUROBOROS_ANALYZER_SOURCE_SHA="$ANALYZER_SHA" ouroboros target --canonical --quiet --json out/scan.json
+          ANALYZER_SHA="$ANALYZER_SHA" python - <<'PY'
           import json, os
           from pathlib import Path
 
