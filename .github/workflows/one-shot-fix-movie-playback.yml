@@ -25,8 +25,8 @@ jobs:
 
           report = Path('engine/src/ouroboros/evolution_movie_report.py')
           text = report.read_text(encoding='utf-8')
-          old = "p.onclick=()=>t?stop():start;s.onchange=()=>{if(t)start()}"
-          new = "p.onclick=()=>t?stop():start();s.onchange=()=>{if(t)start()}"
+          old = "p.onclick=()=>t?stop():start;"
+          new = "p.onclick=()=>t?stop():start();"
           if old not in text:
               raise SystemExit('playback target not found')
           report.write_text(text.replace(old, new, 1), encoding='utf-8')
