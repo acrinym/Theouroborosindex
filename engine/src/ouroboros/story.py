@@ -22,6 +22,22 @@ def load_object(path: str | Path) -> dict[str, Any]:
     return value
 
 
+def _schema_name(payload: dict[str, Any]) -> str | None:
+    schema = payload.get("schema")
+    if isinstance(schema, dict) and isinstance(schema.get("name"), str):
+        return schema["name"]
+    if isinstance(schema, str):
+        return schema.split("/", 1)[0]
+    return None
+
+
+def _require_schema(payload: dict[str, Any], expected: str, label: str) -> None:
+    observed = _schema_name(payload)
+    if observed != expected:
+        shown = observed or "missing"
+        raise StoryError(f"{label} has schema {shown!r}; expected {expected!r}")
+
+
 def _scan_sha(scan: dict[str, Any]) -> str | None:
     identity = scan.get("repository_identity")
     if isinstance(identity, dict) and isinstance(identity.get("git_sha"), str):
@@ -37,6 +53,14 @@ def compose_story(
     drivers: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    _require_schema(scan, "ouroboros-scan", "Current scan")
+    if history is not None:
+        _require_schema(history, "ouroboros-history", "Bounded History artifact")
+    if drivers is not None:
+        _require_schema(drivers, "ouroboros-change-drivers", "Change Drivers artifact")
+    if context is not None:
+        _require_schema(context, "ouroboros-structural-context", "Structural Context artifact")
+
     baseline = scan.get("baseline")
     semantic = scan.get("semantic")
     if not isinstance(baseline, dict) or not isinstance(semantic, dict):
