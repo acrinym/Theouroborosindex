@@ -40,7 +40,7 @@ def build_context_report_html(result: dict[str, Any]) -> str:
 <div><span class="pill">Comparable repositories: {int(cohort.get('repositories') or 0)}</span><span class="pill">Measurement: {html.escape(str(result.get('measurement_model') or 'unknown'))}</span><span class="pill">Canonical: {str(bool(cohort.get('canonical'))).lower()}</span></div>
 <div class="notice"><strong>Not a leaderboard.</strong> Percentile means relative structural position only. Lower-tail and upper-tail measurements can both be deliberate, useful designs.</div>
 <section class="grid">{''.join(cards)}</section>
-<p class="muted">Bands: lower-tail &lt; 10th percentile, middle-range 10th–90th, upper-tail &gt; 90th. Missing evidence stays n/a rather than becoming zero or perfect.</p>
+<p class="muted">Tail labels require at least 10 comparable measurements for that dimension. Smaller cohorts show <code>insufficient-cohort</code> while retaining the raw percentile and n. Missing evidence stays n/a rather than becoming zero or perfect.</p>
 </main></body></html>"""
 
 
