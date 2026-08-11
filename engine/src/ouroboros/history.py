@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -19,6 +21,7 @@ HARD_MAX_COMMITS = 200
 DEFAULT_MAX_COMMITS = 50
 MAX_ARCHIVE_FILES = 150_000
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+MIN_GIT_VERSION = (2, 30)
 
 
 class HistoryError(RuntimeError):
@@ -46,10 +49,22 @@ def _git(root: Path, *args: str, timeout: float = 30.0) -> str:
     return proc.stdout.strip()
 
 
+def _require_supported_git(root: Path) -> None:
+    version_text = _git(root, "--version")
+    match = re.search(r"(\d+)\.(\d+)", version_text)
+    if match is None:
+        raise HistoryError("git-version", f"Could not determine Git version from: {version_text!r}")
+    version = (int(match.group(1)), int(match.group(2)))
+    if version < MIN_GIT_VERSION:
+        required = ".".join(str(part) for part in MIN_GIT_VERSION)
+        raise HistoryError("git-version", f"Bounded History requires Git {required} or newer; found {version_text}")
+
+
 def repository_root(path: str | Path) -> Path:
     requested = Path(path).expanduser().resolve()
     if not requested.exists() or not requested.is_dir():
         raise HistoryError("repository-missing", f"Repository path does not exist or is not a directory: {requested}")
+    _require_supported_git(requested)
     value = _git(requested, "rev-parse", "--show-toplevel")
     root = Path(value).resolve()
     if not root.exists() or not root.is_dir():
@@ -58,7 +73,7 @@ def repository_root(path: str | Path) -> Path:
 
 
 def resolve_commit(root: Path, ref: str) -> str:
-    value = _git(root, "rev-parse", "--verify", f"{ref}^{{commit}}")
+    value = _git(root, "rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")
     sha = value.splitlines()[-1].strip().lower()
     if len(sha) != 40 or any(char not in "0123456789abcdef" for char in sha):
         raise HistoryError("invalid-commit", f"Git did not resolve {ref!r} to a full commit SHA")
@@ -164,22 +179,43 @@ def extract_static_archive(archive_path: Path, destination: Path) -> dict[str, i
 def archive_commit(root: Path, sha: str, destination: Path) -> dict[str, int]:
     destination.mkdir(parents=True, exist_ok=True)
     archive_path = destination.parent / "snapshot.tar"
+    started = time.monotonic()
     try:
-        with archive_path.open("wb") as output:
-            proc = subprocess.run(
-                ["git", "-C", str(root), "archive", "--format=tar", sha],
-                check=False,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=60,
-            )
+        proc = subprocess.Popen(
+            ["git", "-C", str(root), "archive", "--format=tar", "-o", str(archive_path), sha],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
     except FileNotFoundError as exc:
         raise HistoryError("git-not-found", "Git is required for bounded history analysis") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise HistoryError("git-timeout", f"git archive timed out for {sha}") from exc
+
+    while proc.poll() is None:
+        if time.monotonic() - started > 60:
+            proc.kill()
+            proc.wait()
+            archive_path.unlink(missing_ok=True)
+            raise HistoryError("git-timeout", f"git archive timed out for {sha}")
+        try:
+            archive_size = archive_path.stat().st_size if archive_path.exists() else 0
+        except OSError:
+            proc.kill()
+            proc.wait()
+            raise
+        if archive_size > MAX_ARCHIVE_BYTES:
+            proc.kill()
+            proc.wait()
+            archive_path.unlink(missing_ok=True)
+            raise HistoryError("snapshot-too-large", f"Historical snapshot archive exceeded {MAX_ARCHIVE_BYTES} bytes")
+        time.sleep(0.02)
+
+    _, stderr = proc.communicate()
     if proc.returncode != 0:
-        detail = proc.stderr.decode("utf-8", errors="replace").strip() or "git archive failed"
+        detail = stderr.decode("utf-8", errors="replace").strip() or "git archive failed"
+        archive_path.unlink(missing_ok=True)
         raise HistoryError("git-error", detail)
+    if archive_path.stat().st_size > MAX_ARCHIVE_BYTES:
+        archive_path.unlink(missing_ok=True)
+        raise HistoryError("snapshot-too-large", f"Historical snapshot archive exceeded {MAX_ARCHIVE_BYTES} bytes")
     return extract_static_archive(archive_path, destination)
 
 
