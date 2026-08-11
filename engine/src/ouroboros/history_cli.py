@@ -97,7 +97,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.json_path:
         try:
             target = write_history_json(result, Path(args.json_path))
-        except OSError as exc:
+        except (OSError, TypeError, ValueError) as exc:
             print(f"Ouroboros history: could not write JSON: {exc}")
             return 2
         if not args.quiet:
