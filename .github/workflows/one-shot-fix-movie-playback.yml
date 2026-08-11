@@ -1,0 +1,55 @@
+name: One-shot fix Evolution Movie playback
+
+on:
+  push:
+    branches:
+      - agent/movie-playback-fix-runner-20260811
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Evolution Movie branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/evolution-movie-20260811
+          fetch-depth: 0
+
+      - name: Patch playback and regression test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          report = Path('engine/src/ouroboros/evolution_movie_report.py')
+          text = report.read_text(encoding='utf-8')
+          old = "p.onclick=()=>t?stop():start;s.onchange=()=>{if(t)start()}"
+          new = "p.onclick=()=>t?stop():start();s.onchange=()=>{if(t)start()}"
+          if old not in text:
+              raise SystemExit('playback target not found')
+          report.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          tests = Path('engine/tests/test_evolution_movie.py')
+          text = tests.read_text(encoding='utf-8')
+          anchor = '    assert \'aria-label="Playback speed"\' in report\n'
+          addition = anchor + '    assert "p.onclick=()=>t?stop():start()" in report\n'
+          if anchor not in text:
+              raise SystemExit('test anchor not found')
+          tests.write_text(text.replace(anchor, addition, 1), encoding='utf-8')
+          PY
+
+      - name: Run focused and full tests
+        run: |
+          python -m pip install --disable-pip-version-check -e 'engine[test]'
+          pytest -q engine/tests/test_evolution_movie.py
+          pytest -q engine/tests
+
+      - name: Commit playback fix
+        run: |
+          git config user.name 'Onyx Product Train'
+          git config user.email 'actions@users.noreply.github.com'
+          git add engine/src/ouroboros/evolution_movie_report.py engine/tests/test_evolution_movie.py
+          git commit -m 'Fix Evolution Movie playback control'
+          git push origin HEAD:agent/evolution-movie-20260811
