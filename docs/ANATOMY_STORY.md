@@ -36,6 +36,8 @@ The default report is `ouroboros-story.html` and answers four questions in one p
 
 Anatomy Story is deterministic presentation. It does not invoke an LLM, rescan repositories, crawl history, generate recommendations, assign developer blame, or manufacture another scalar score.
 
+The composer verifies that each supplied JSON artifact identifies itself with the expected Ouroboros schema (`ouroboros-scan`, `ouroboros-history`, `ouroboros-change-drivers`, or `ouroboros-structural-context`). Structurally similar unrelated JSON is rejected instead of being silently presented as Ouroboros evidence.
+
 If supplied artifacts refer to different known current commit SHAs, the story surfaces coherence notes instead of silently pretending they describe the same state. A Change Drivers artifact may intentionally describe a historical change point rather than the current commit, and is labeled accordingly.
 
 The report is self-contained: no remote JavaScript, CSS, fonts, analytics, or telemetry.
