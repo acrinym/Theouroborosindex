@@ -15,6 +15,8 @@ ouroboros-context corpus.jsonl --scan scan.json --report
 
 The corpus is deduplicated to the newest successful measurement for each repository. Only records with the same declared semantic measurement generation and canonical setting are admitted to the comparable cohort.
 
+Structural Context works entirely from the supplied local JSONL corpus and scan data. It performs no repository acquisition, network lookup, or target-code execution while calculating context.
+
 For each available dimension, the output shows the query value, empirical percentile, comparable sample size, minimum, median, maximum, and a neutral location band. Tail labels require at least 10 comparable measurements for that dimension:
 
 - `insufficient-cohort`: fewer than 10 comparable values; the raw percentile is shown, but no tail claim is made;
