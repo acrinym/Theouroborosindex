@@ -6,7 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from ouroboros.history import HistoryError, first_parent_commits, history_events, repository_root
+import ouroboros.history as history_module
+import ouroboros.history_cli as history_cli_module
+from ouroboros.history import (
+    HistoryError,
+    archive_commit,
+    first_parent_commits,
+    history_events,
+    repository_root,
+    resolve_commit,
+)
 from ouroboros.history_cli import main as history_main
 from ouroboros.history_report import build_history_report_html
 
@@ -23,9 +32,12 @@ def _git(repo: Path, *args: str) -> str:
 
 def _init_repo(path: Path) -> Path:
     path.mkdir()
-    _git(path, "init", "-b", "main")
+    _git(path, "init", "-b", "main", "--template=")
     _git(path, "config", "user.name", "Ouroboros Test")
     _git(path, "config", "user.email", "ouroboros@example.invalid")
+    _git(path, "config", "commit.gpgsign", "false")
+    _git(path, "config", "tag.gpgsign", "false")
+    _git(path, "config", "core.hooksPath", str(path / ".git" / "no-hooks"))
     return path
 
 
@@ -90,6 +102,15 @@ def test_first_parent_range_is_inclusive_and_ordered(tmp_path: Path):
     assert first_parent_commits(root, first, third, max_commits=3) == [first, second, third]
 
 
+def test_option_shaped_ref_is_not_parsed_as_git_option(tmp_path: Path):
+    repo = _init_repo(tmp_path / "repo")
+    (repo / "app.py").write_text("value = 1\n", encoding="utf-8")
+    _commit(repo, "first")
+
+    with pytest.raises(HistoryError):
+        resolve_commit(repository_root(repo), "--local-env-vars")
+
+
 def test_history_range_refuses_sampling_when_bound_is_too_small(tmp_path: Path):
     repo = _init_repo(tmp_path / "repo")
     shas = []
@@ -100,6 +121,17 @@ def test_history_range_refuses_sampling_when_bound_is_too_small(tmp_path: Path):
     with pytest.raises(HistoryError) as exc:
         first_parent_commits(repository_root(repo), shas[0], shas[-1], max_commits=3)
     assert exc.value.code == "history-range-too-large"
+
+
+def test_archive_commit_stops_when_tar_exceeds_bound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    repo = _init_repo(tmp_path / "repo")
+    (repo / "app.py").write_text("x" * 32_768, encoding="utf-8")
+    sha = _commit(repo, "large snapshot")
+    monkeypatch.setattr(history_module, "MAX_ARCHIVE_BYTES", 1024)
+
+    with pytest.raises(HistoryError) as exc:
+        archive_commit(repository_root(repo), sha, tmp_path / "snapshot")
+    assert exc.value.code == "snapshot-too-large"
 
 
 def test_history_events_pin_repository_directory_and_depth_changes_to_after_commit():
@@ -162,6 +194,21 @@ def test_history_report_is_self_contained_and_escapes_commit_text():
     assert "<script>alert(1)</script>" not in text
     assert "https://" not in text.lower()
     assert "<script src=" not in text.lower()
+
+
+def test_history_cli_reports_json_serialization_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    result = {
+        "repository": "/repo",
+        "range": {"from_sha": "1" * 40, "to_sha": "2" * 40, "commits_scanned": 2},
+        "events": [],
+    }
+    monkeypatch.setattr(history_cli_module, "scan_history", lambda *args, **kwargs: result)
+
+    def fail_json(*args, **kwargs):
+        raise ValueError("non-finite metric")
+
+    monkeypatch.setattr(history_cli_module, "write_history_json", fail_json)
+    assert history_cli_module.main([".", "--from", "HEAD", "--json", str(tmp_path / "history.json"), "--quiet"]) == 2
 
 
 def test_history_cli_scans_static_snapshots_without_executing_target_code(tmp_path: Path):
