@@ -15,11 +15,12 @@ ouroboros-context corpus.jsonl --scan scan.json --report
 
 The corpus is deduplicated to the newest successful measurement for each repository. Only records with the same declared semantic measurement generation and canonical setting are admitted to the comparable cohort.
 
-For each available dimension, the output shows the query value, empirical percentile, comparable sample size, minimum, median, maximum, and a neutral location band:
+For each available dimension, the output shows the query value, empirical percentile, comparable sample size, minimum, median, maximum, and a neutral location band. Tail labels require at least 10 comparable measurements for that dimension:
 
-- `lower-tail`: below the 10th percentile;
-- `middle-range`: 10th through 90th percentile;
-- `upper-tail`: above the 90th percentile.
+- `insufficient-cohort`: fewer than 10 comparable values; the raw percentile is shown, but no tail claim is made;
+- `lower-tail`: below the 10th percentile when the cohort is large enough;
+- `middle-range`: 10th through 90th percentile when the cohort is large enough;
+- `upper-tail`: above the 90th percentile when the cohort is large enough.
 
 Dimensions include direct product share, machinery share, scaffolding/product ratio, exact recursive depth, Semantic Index, far-from-value symbol share, and exact relationship coverage when that evidence exists.
 
