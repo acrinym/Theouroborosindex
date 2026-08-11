@@ -30,7 +30,7 @@ def test_context_declares_current_measurement_generation_without_open_ending_fut
     assert semantic_model_for_version("0.11.0") is None
 
 
-def test_structural_context_dedupes_repositories_and_reports_neutral_percentiles():
+def test_structural_context_dedupes_repositories_and_withholds_tail_labels_for_small_cohorts():
     old = _record("org/a", sha="1" * 40, product=0.2, machinery=0.8, depth=4, index=60, scanned_at="2026-08-01T00:00:00Z")
     new = _record("org/a", sha="2" * 40, product=0.5, machinery=0.5, depth=2, index=30, scanned_at="2026-08-10T00:00:00Z")
     query_record = _record("org/query", sha="3" * 40, product=0.9, machinery=0.1, depth=0, index=5, scanned_at="2026-08-10T00:00:00Z")
@@ -38,9 +38,20 @@ def test_structural_context_dedupes_repositories_and_reports_neutral_percentiles
     query = fingerprint_from_context_record(query_record)
     result = structural_context(query, [old, new, other, query_record])
     assert result["cohort"]["repositories"] == 3
+    assert result["dimensions"]["product_share"]["band"] == "insufficient-cohort"
+    assert result["dimensions"]["machinery_share"]["band"] == "insufficient-cohort"
+    assert result["dimensions"]["product_share"]["percentile"] > 50
+    assert "not a quality rank" in result["semantics"]["percentile"]
+
+
+def test_tail_bands_are_available_once_the_comparable_cohort_is_large_enough():
+    query_record = _record("org/query", sha="f" * 40, product=0.99, machinery=0.01, depth=0, index=1, scanned_at="2026-08-10T00:00:00Z")
+    peers = [query_record]
+    for index in range(10):
+        peers.append(_record(f"org/{index}", sha=f"{index:040x}", product=0.2 + index * 0.05, machinery=0.8 - index * 0.05, depth=index % 4, index=10 + index, scanned_at="2026-08-10T00:00:00Z"))
+    result = structural_context(fingerprint_from_context_record(query_record), peers)
     assert result["dimensions"]["product_share"]["band"] == "upper-tail"
     assert result["dimensions"]["machinery_share"]["band"] == "lower-tail"
-    assert "not a quality rank" in result["semantics"]["percentile"]
 
 
 def test_context_report_is_self_contained_and_nonjudgmental():
@@ -66,4 +77,5 @@ def test_context_cli_reads_corpus_and_writes_json_and_report(tmp_path: Path):
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["cohort"]["repositories"] == 2
     assert payload["dimensions"]["product_share"]["available"] is True
+    assert payload["dimensions"]["product_share"]["band"] == "insufficient-cohort"
     assert report.exists()
