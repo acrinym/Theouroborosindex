@@ -148,6 +148,7 @@ def test_movie_report_is_self_contained_interactive_and_does_not_embed_raw_commi
     assert 'class="frame"' in report
     assert "application/octet-stream" in report
     assert 'aria-label="Playback speed"' in report
+    assert "p.onclick=()=>t?stop():start()" in report
     assert "</script><script>alert(1)</script>" not in report
     assert "<script src=" not in report.lower()
     assert "https://" not in report.lower()
