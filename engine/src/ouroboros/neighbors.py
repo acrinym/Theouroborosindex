@@ -68,7 +68,7 @@ def _semantic_model_for_version(version: str | None) -> str | None:
     minor = int(match.group(2))
     # This compatibility declaration is deliberately closed-ended. A future
     # release must explicitly opt in if its measurement rules remain equivalent.
-    if major == 0 and 3 <= minor <= 8:
+    if major == 0 and 3 <= minor <= 10:
         return MEASUREMENT_MODEL
     return None
 
