@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .comparison import compare_scans
 
 
@@ -45,7 +49,6 @@ def _file_driver(path: str, before: dict[str, Any] | None, after: dict[str, Any]
 
 
 def change_drivers(before: dict[str, Any], after: dict[str, Any], *, limit: int = DEFAULT_DRIVER_LIMIT) -> dict[str, Any]:
-    """Return bounded, inspectable structural contributors between two scans."""
     if limit < 1:
         raise ValueError("driver limit must be at least 1")
     comparison = compare_scans(before, after)
@@ -53,18 +56,16 @@ def change_drivers(before: dict[str, Any], after: dict[str, Any], *, limit: int 
     after_components = _components(after)
     files: list[dict[str, Any]] = []
     for path in sorted(set(before_components) | set(after_components)):
-        left = before_components.get(path)
-        right = after_components.get(path)
-        driver = _file_driver(path, left, right)
+        driver = _file_driver(path, before_components.get(path), after_components.get(path))
         if driver["structural_movement_lines"] > 0 or driver["status"] in {"added", "removed", "recategorized"}:
             files.append(driver)
     files.sort(key=lambda row: (-int(row["structural_movement_lines"]), row["path"]))
 
-    category_rows = []
+    categories = []
     for category, row in (comparison.get("category_deltas") or {}).items():
         delta = int(row.get("delta") or 0)
         if delta:
-            category_rows.append(
+            categories.append(
                 {
                     "category": category,
                     "before": int(row.get("before") or 0),
@@ -72,18 +73,53 @@ def change_drivers(before: dict[str, Any], after: dict[str, Any], *, limit: int 
                     "delta": delta,
                 }
             )
-    category_rows.sort(key=lambda row: (-abs(int(row["delta"])), row["category"]))
+    categories.sort(key=lambda row: (-abs(int(row["delta"])), row["category"]))
 
     return {
         "semantics": "largest observed adjacent structural contributors; evidence, not blame or a quality score",
         "files": files[:limit],
         "file_changes_observed": len(files),
-        "categories": category_rows,
+        "categories": categories,
         "deepest_exact_chains": comparison.get("deepest_exact_chains") or {"added": [], "removed": [], "changed": []},
+        "structural_explanations": comparison.get("structural_explanations") or [],
     }
 
 
-def focus_directory_drivers(drivers: dict[str, Any], directory: str, *, limit: int = DEFAULT_DRIVER_LIMIT) -> list[dict[str, Any]]:
-    prefix = directory.rstrip("/") + "/" if directory not in {"", "."} else ""
-    rows = [row for row in drivers.get("files") or [] if str(row.get("path") or "").startswith(prefix)]
-    return rows[:limit]
+def scan_change_drivers(
+    path: str | Path,
+    *,
+    before_ref: str,
+    after_ref: str,
+    limit: int = DEFAULT_DRIVER_LIMIT,
+) -> dict[str, Any]:
+    from .history import _scan_payload, archive_commit, commit_metadata, repository_root, resolve_commit
+
+    root = repository_root(path)
+    before_sha = resolve_commit(root, before_ref)
+    after_sha = resolve_commit(root, after_ref)
+    payloads: list[dict[str, Any]] = []
+    acquisitions: list[dict[str, int]] = []
+    with tempfile.TemporaryDirectory(prefix="ouroboros-drivers-") as temp:
+        temp_root = Path(temp)
+        for index, sha in enumerate((before_sha, after_sha)):
+            commit_dir = temp_root / f"snapshot-{index}"
+            snapshot = commit_dir / "tree"
+            acquisitions.append(archive_commit(root, sha, snapshot))
+            payload, _ = _scan_payload(root, sha, snapshot)
+            payloads.append(payload)
+            shutil.rmtree(commit_dir, ignore_errors=True)
+
+    return {
+        "schema": {"name": "ouroboros-change-drivers", "version": 1},
+        "analyzer": {"name": "Ouroboros", "version": __version__},
+        "repository": str(root),
+        "before": {**commit_metadata(root, before_sha), "ref": before_ref, "acquisition": acquisitions[0]},
+        "after": {**commit_metadata(root, after_sha), "ref": after_ref, "acquisition": acquisitions[1]},
+        "scan_policy": {
+            "canonical": True,
+            "target_execution": False,
+            "history_transport": "git-archive",
+            "snapshots_scanned": 2,
+        },
+        "drivers": change_drivers(payloads[0], payloads[1], limit=limit),
+    }
