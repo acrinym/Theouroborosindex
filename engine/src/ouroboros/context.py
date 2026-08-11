@@ -84,7 +84,9 @@ def _percentile(value: float, cohort: list[float]) -> float:
     return 100.0 * (below + 0.5 * equal) / len(cohort)
 
 
-def _band(percentile: float) -> str:
+def _band(percentile: float, cohort_size: int) -> str:
+    if cohort_size < 10:
+        return "insufficient-cohort"
     if percentile < 10.0:
         return "lower-tail"
     if percentile > 90.0:
@@ -132,7 +134,7 @@ def structural_context(query: dict[str, Any], records: Iterable[dict[str, Any]])
             "available": True,
             "value": query_value,
             "percentile": percentile,
-            "band": _band(percentile),
+            "band": _band(percentile, len(cohort)),
             "cohort_size": len(cohort),
             "minimum": min(cohort),
             "median": sorted(cohort)[len(cohort) // 2],
@@ -152,7 +154,12 @@ def structural_context(query: dict[str, Any], records: Iterable[dict[str, Any]])
         "dimensions": dimensions,
         "semantics": {
             "percentile": "empirical relative position among comparable repositories; not a quality rank",
-            "bands": {"lower-tail": "below the 10th percentile", "middle-range": "10th through 90th percentile", "upper-tail": "above the 90th percentile"},
+            "bands": {
+                "insufficient-cohort": "fewer than 10 comparable measurements; percentile shown without a tail claim",
+                "lower-tail": "below the 10th percentile",
+                "middle-range": "10th through 90th percentile",
+                "upper-tail": "above the 90th percentile",
+            },
             "judgment": "none; lower and upper positions can both be intentional",
         },
     }
