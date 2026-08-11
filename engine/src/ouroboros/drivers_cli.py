@@ -24,6 +24,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _role(value: object) -> str:
+    return "—" if value is None else str(value)
+
+
 def _summary(result: dict) -> str:
     drivers = result["drivers"]
     lines = [
@@ -35,7 +39,10 @@ def _summary(result: dict) -> str:
         "Largest observed file contributors:",
     ]
     for row in drivers.get("files") or []:
-        lines.append(f"  {row['path']}  {row['status']}  {row['delta_code_lines']:+,} LOC  {row.get('before_category')} → {row.get('after_category')}")
+        lines.append(
+            f"  {row['path']}  {row['status']}  {row['delta_code_lines']:+,} LOC  "
+            f"{_role(row.get('before_category'))} → {_role(row.get('after_category'))}"
+        )
     if not drivers.get("files"):
         lines.append("  No file-level structural movement was observed.")
     lines.append("")
