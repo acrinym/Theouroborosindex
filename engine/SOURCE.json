@@ -1,6 +1,6 @@
 {
   "name": "Ouroboros",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "source_model": "direct-package-source",
   "lineage": {
     "original_repository": "acrinym/Secretprojects",
@@ -8,5 +8,5 @@
     "original_pr": 66,
     "original_merge_commit": "8dd80c3a0755f6990c8461e30c73b27b2f62d7f8"
   },
-  "notes": "0.8 is maintained directly in Theouroborosindex. Bounded History scans every first-parent commit in an explicit local Git range using inert git-archive snapshots, locates repository/directory crossovers and exact-depth changes, and refuses oversized ranges instead of sampling them."
+  "notes": "0.9 is maintained directly in Theouroborosindex. Change Drivers compares exactly two inert canonical Git snapshots and surfaces the files, category movement, and deepest EXACT-chain changes behind an observed structural shift without assigning blame or a quality verdict."
 }
