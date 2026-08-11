@@ -9,4 +9,4 @@ __all__ = ["analyze_repository"]
 try:
     __version__ = version("repo-ouroboros")
 except PackageNotFoundError:
-    __version__ = "0.9.0.dev0"
+    __version__ = "0.10.0.dev0"
