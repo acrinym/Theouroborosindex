@@ -1,0 +1,34 @@
+# Structural Context
+
+Ouroboros 0.10 answers **“is this anatomy unusual?”** without turning the Index into a leaderboard.
+
+```bash
+ouroboros-context corpus.jsonl --repo owner/name --report
+```
+
+A saved local scan can also be contextualized:
+
+```bash
+ouroboros /path/to/repo --canonical --json scan.json
+ouroboros-context corpus.jsonl --scan scan.json --report
+```
+
+The corpus is deduplicated to the newest successful measurement for each repository. Only records with the same declared semantic measurement generation and canonical setting are admitted to the comparable cohort.
+
+For each available dimension, the output shows the query value, empirical percentile, comparable sample size, minimum, median, maximum, and a neutral location band:
+
+- `lower-tail`: below the 10th percentile;
+- `middle-range`: 10th through 90th percentile;
+- `upper-tail`: above the 90th percentile.
+
+Dimensions include direct product share, machinery share, scaffolding/product ratio, exact recursive depth, Semantic Index, far-from-value symbol share, and exact relationship coverage when that evidence exists.
+
+Percentiles are **relative structural position, not quality rank**. An upper-tail test/tooling share can be appropriate; a lower-tail recursive depth can be appropriate; the Index does not declare either virtuous or defective.
+
+Missing evidence remains `n/a` and is not converted into zero or perfection. Cohort size is shown per dimension so a thin corpus cannot masquerade as strong population knowledge.
+
+The HTML report is self-contained and loads no remote scripts, fonts, analytics, or telemetry.
+
+## Scope boundary
+
+Structural Context adds no scorecard, ranking table, winner/loser language, policy gate, recommendation bot, background crawler, or audit-of-audit mechanism. It contextualizes measurements already present in the Index.
