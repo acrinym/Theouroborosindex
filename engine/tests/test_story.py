@@ -3,13 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ouroboros.story import compose_story
+import pytest
+
+from ouroboros.story import StoryError, compose_story
 from ouroboros.story_cli import main as story_main
 from ouroboros.story_report import build_story_report_html
 
 
 def _scan(sha: str = "1" * 40) -> dict:
     return {
+        "schema": {"name": "ouroboros-scan", "version": 2},
         "repository": "/repo/<name>",
         "repository_identity": {"git_sha": sha},
         "fingerprint": {"kind": "test"},
@@ -20,6 +23,7 @@ def _scan(sha: str = "1" * 40) -> dict:
 
 def _history(sha: str = "1" * 40) -> dict:
     return {
+        "schema": {"name": "ouroboros-history", "version": 1},
         "range": {"to_sha": sha},
         "events": [{"type": "recursive-depth-change", "commit": sha, "before": 1, "after": 2, "subject": "depth <change>"}],
     }
@@ -27,6 +31,7 @@ def _history(sha: str = "1" * 40) -> dict:
 
 def _drivers(sha: str = "1" * 40) -> dict:
     return {
+        "schema": {"name": "ouroboros-change-drivers", "version": 1},
         "after": {"sha": sha},
         "drivers": {"files": [{"path": "src/<driver>.py", "status": "changed", "before_category": "core-product", "after_category": "core-product", "delta_code_lines": 12}]},
     }
@@ -34,6 +39,7 @@ def _drivers(sha: str = "1" * 40) -> dict:
 
 def _context(sha: str = "1" * 40) -> dict:
     return {
+        "schema": {"name": "ouroboros-structural-context", "version": 1},
         "query": {"repository_sha": sha},
         "dimensions": {"product_share": {"label": "Direct product share", "available": True, "percentile": 75.0, "band": "middle-range", "cohort_size": 20}},
     }
@@ -46,6 +52,13 @@ def test_story_composes_existing_evidence_without_new_judgment():
     assert story["driver_relation"] == "current-commit"
     assert story["coherence"]["warnings"] == []
     assert "adds no new score" in story["semantics"]
+
+
+def test_story_rejects_artifacts_that_are_not_the_claimed_ouroboros_type():
+    wrong = _history()
+    wrong["schema"]["name"] = "not-ouroboros-history"
+    with pytest.raises(StoryError, match="expected 'ouroboros-history'"):
+        compose_story(_scan(), history=wrong)
 
 
 def test_story_surfaces_artifact_commit_mismatches_instead_of_hiding_them():
