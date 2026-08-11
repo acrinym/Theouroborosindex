@@ -59,7 +59,7 @@ def change_drivers(before: dict[str, Any], after: dict[str, Any], *, limit: int 
         driver = _file_driver(path, before_components.get(path), after_components.get(path))
         if driver["structural_movement_lines"] > 0 or driver["status"] in {"added", "removed", "recategorized"}:
             files.append(driver)
-    files.sort(key=lambda row: (-int(row["structural_movement_lines"]), row["path"]))
+    files.sort(key=lambda row: (-row["structural_movement_lines"], row["path"]))
 
     categories = []
     for category, row in (comparison.get("category_deltas") or {}).items():
