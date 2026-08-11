@@ -103,10 +103,10 @@ def _scan(name: str = "/tmp/query") -> dict:
 
 
 def test_declared_semantic_releases_share_measurement_model_but_future_release_does_not():
-    for version in ("0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0", "0.10.0.dev0"):
+    for version in ("0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.11.0.dev0"):
         fingerprint = fingerprint_from_index_record(_index_record("org/repo", sha="1" * 40, version=version))
         assert fingerprint["measurement_model"] == MEASUREMENT_MODEL
-    future = fingerprint_from_index_record(_index_record("org/future", sha="2" * 40, version="0.11.0"))
+    future = fingerprint_from_index_record(_index_record("org/future", sha="2" * 40, version="0.12.0"))
     assert future["measurement_model"] is None
 
 
@@ -181,8 +181,8 @@ def test_neighbor_results_collapse_multiple_candidate_revisions_to_closest_recor
 
 
 def test_unknown_future_measurement_model_is_excluded_unless_cross_model_enabled():
-    query = fingerprint_from_index_record(_index_record("org/query", sha="1" * 40, version="0.10.0"))
-    future = _index_record("org/future", sha="2" * 40, version="0.11.0")
+    query = fingerprint_from_index_record(_index_record("org/query", sha="1" * 40, version="0.11.0"))
+    future = _index_record("org/future", sha="2" * 40, version="0.12.0")
     strict = find_neighbors(query, [future])
     assert strict["neighbors"] == []
     assert strict["cohort"]["excluded"]["measurement_model_mismatch"] == 1

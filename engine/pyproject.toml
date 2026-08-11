@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repo-ouroboros"
-version = "0.10.0"
+version = "0.11.0"
 description = "See how much of a repository is product versus machinery around the product"
 requires-python = ">=3.10"
 dependencies = [
@@ -22,6 +22,7 @@ ouroboros-neighbors = "ouroboros.neighbors_cli:main"
 ouroboros-history = "ouroboros.history_cli:main"
 ouroboros-drivers = "ouroboros.drivers_cli:main"
 ouroboros-context = "ouroboros.context_cli:main"
+ouroboros-story = "ouroboros.story_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
