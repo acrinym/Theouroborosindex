@@ -14,6 +14,7 @@ from .config import Config, load_config
 from .graph import resolve_dependencies
 from .identity import static_git_sha
 from .living_report import write_living_report
+from .neighbors import MEASUREMENT_MODEL
 from .scanner import scan_repository
 from .semantic import build_semantic_graph
 
@@ -24,6 +25,10 @@ def _percent(value: float) -> str:
 
 def _ratio(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.2f}:1"
+
+
+def _rating(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
 def _friendly_summary(path: Path, baseline, semantic) -> str:
@@ -65,7 +70,7 @@ def _friendly_summary(path: Path, baseline, semantic) -> str:
             lines.append(f"  - Semantic parser diagnostics: {error_count} error(s), {warning_count} warning(s).")
     lines.extend([
         "",
-        "Tip: use --report for Living Repository Anatomy: a spatial map, fingerprint, exact chains, and classification evidence.",
+        "Tip: use --rating-only for the original scalar Index, or --report for Living Repository Anatomy.",
     ])
     return "\n".join(lines)
 
@@ -98,6 +103,7 @@ def _scan_payload(root: Path, baseline, semantic, *, canonical: bool) -> dict:
             "canonical": canonical,
             "target_execution": False,
             "relationship_topology": "exact-only",
+            "measurement_model": MEASUREMENT_MODEL,
         },
         "fingerprint": anatomy_fingerprint(baseline, semantic),
         "baseline": baseline.to_dict(),
@@ -121,14 +127,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write a self-contained Living Repository Anatomy HTML report (default: ouroboros-report.html)",
     )
     parser.add_argument("--quiet", action="store_true", help="Suppress the friendly text summary")
+    parser.add_argument(
+        "--rating-only",
+        action="store_true",
+        help="Print only the original file-level Ouroboros Index as a script-friendly scalar",
+    )
     parser.add_argument("--canonical", action="store_true", help="Ignore repo-authored .ouroboros.json overrides, like the public Index")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.rating_only and (args.quiet or args.json_path or args.report_path):
+        parser.error("--rating-only cannot be combined with --quiet, --json, or --report")
+
     root = Path(args.path).expanduser().resolve()
+    if args.rating_only:
+        try:
+            baseline = analyze_repository(root, use_repo_config=not args.canonical)
+        except (OSError, ValueError) as exc:
+            print(f"Ouroboros could not scan {root}: {exc}")
+            return 2
+        print(_rating(baseline.metrics.ouroboros_index))
+        return 0
+
     try:
         baseline, semantic = scan(root, use_repo_config=not args.canonical)
     except (OSError, ValueError) as exc:
