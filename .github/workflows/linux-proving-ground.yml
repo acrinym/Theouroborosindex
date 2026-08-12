@@ -14,7 +14,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.pull_request.head.repo.full_name == github.repository &&
-        github.head_ref == 'agent/linux-proving-ground-20260811'
+        startsWith(github.head_ref, 'agent/linux-')
       )
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -74,9 +74,16 @@ jobs:
         env:
           OUROBOROS_ANALYZER_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          set -o pipefail
+          set +e
           /usr/bin/time -v -o out/semantic-time.txt \
-            ouroboros target --canonical --quiet --json out/linux-semantic.json
+            timeout --signal=TERM --kill-after=30s 105m \
+            ouroboros target --canonical --quiet \
+              --timings-json out/linux-timings.json \
+              --json out/linux-semantic.json
+          status=$?
+          set -e
+          printf '%s\n' "$status" | tee out/scan-exit-code.txt
+          exit "$status"
 
       - name: Summarize semantic result
         if: success()
@@ -95,19 +102,24 @@ jobs:
               ) from exc
 
           metrics = payload['semantic']['metrics']
+          timings_path = Path('out/linux-timings.json')
+          timings = json.loads(timings_path.read_text()) if timings_path.exists() else {}
           summary = {
               'repository': 'torvalds/linux',
               'repository_sha': 'f5bbbfec59b4e2fb7520a91de3df8a6174325d6a',
-              'analyzer_sha': payload.get('analyzer', {}).get('source_head'),
-              'files': payload.get('totals', {}).get('files'),
-              'code_lines': payload.get('totals', {}).get('code_lines'),
+              'analyzer_sha': payload.get('analyzer', {}).get('source_sha'),
+              'files': payload.get('baseline', {}).get('metrics', {}).get('file_count'),
+              'code_lines': payload.get('baseline', {}).get('metrics', {}).get('total_code_lines'),
               'symbols': metrics.get('symbol_count'),
-              'edges': metrics.get('edge_count'),
+              'relationships': metrics.get('relationship_count'),
               'exact_resolution_rate': metrics.get('exact_resolution_rate'),
               'resolution_rate': metrics.get('resolution_rate'),
               'max_recursive_depth': metrics.get('max_recursive_depth'),
               'semantic_ouroboros_index': metrics.get('semantic_ouroboros_index'),
+              'chain_expansions': metrics.get('chain_expansions'),
+              'chain_truncated': metrics.get('chain_truncated'),
               'diagnostics': len(payload.get('semantic', {}).get('diagnostics') or []),
+              'timings': timings,
           }
           Path('out/linux-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
           print(json.dumps(summary, indent=2, sort_keys=True))
@@ -117,6 +129,8 @@ jobs:
         if: always()
         run: |
           cat out/facts.txt || true
+          cat out/scan-exit-code.txt || true
+          cat out/linux-timings.json || true
           cat out/semantic-time.txt || true
           du -sh out || true
 
