@@ -101,6 +101,9 @@ jobs:
                   f"line {exc.lineno}, column {exc.colno}: {exc.msg}"
               ) from exc
 
+          baseline = payload['baseline']
+          baseline_metrics = baseline['metrics']
+          components = baseline['components']
           metrics = payload['semantic']['metrics']
           timings_path = Path('out/linux-timings.json')
           timings = json.loads(timings_path.read_text()) if timings_path.exists() else {}
@@ -108,17 +111,41 @@ jobs:
               'repository': 'torvalds/linux',
               'repository_sha': 'f5bbbfec59b4e2fb7520a91de3df8a6174325d6a',
               'analyzer_sha': payload.get('analyzer', {}).get('source_sha'),
-              'files': payload.get('baseline', {}).get('metrics', {}).get('file_count'),
-              'code_lines': payload.get('baseline', {}).get('metrics', {}).get('total_code_lines'),
-              'symbols': metrics.get('symbol_count'),
-              'relationships': metrics.get('relationship_count'),
-              'exact_resolution_rate': metrics.get('exact_resolution_rate'),
-              'resolution_rate': metrics.get('resolution_rate'),
-              'max_recursive_depth': metrics.get('max_recursive_depth'),
-              'semantic_ouroboros_index': metrics.get('semantic_ouroboros_index'),
-              'chain_expansions': metrics.get('chain_expansions'),
-              'chain_truncated': metrics.get('chain_truncated'),
-              'diagnostics': len(payload.get('semantic', {}).get('diagnostics') or []),
+              'files': len(components),
+              'code_lines': sum(
+                  component.get('code_lines', 0)
+                  for component in components
+                  if component.get('category') != 'documentation'
+              ),
+              'file_level': {
+                  'ouroboros_index': baseline_metrics.get('ouroboros_index'),
+                  'direct_product_share': baseline_metrics.get('direct_product_share'),
+                  'product_plus_essential_share': baseline_metrics.get('product_plus_essential_share'),
+                  'tooling_share': baseline_metrics.get('tooling_share'),
+                  'audit_ratio': baseline_metrics.get('audit_ratio'),
+                  'scaffolding_ratio': baseline_metrics.get('scaffolding_ratio'),
+                  'max_audit_depth': baseline_metrics.get('max_audit_depth'),
+              },
+              'semantic': {
+                  'symbols': metrics.get('symbol_count'),
+                  'relationships': metrics.get('relationship_count'),
+                  'resolved_relationships': metrics.get('resolved_relationships'),
+                  'probable_relationships': metrics.get('probable_relationships'),
+                  'unresolved_relationships': metrics.get('unresolved_relationships'),
+                  'exact_resolution_rate': metrics.get('exact_resolution_rate'),
+                  'resolution_rate': metrics.get('resolution_rate'),
+                  'direct_product_symbol_share': metrics.get('direct_product_symbol_share'),
+                  'machinery_symbol_share': metrics.get('machinery_symbol_share'),
+                  'audit_symbol_share': metrics.get('audit_symbol_share'),
+                  'meta_symbol_share': metrics.get('meta_symbol_share'),
+                  'scaffolding_symbol_ratio': metrics.get('scaffolding_symbol_ratio'),
+                  'max_value_distance': metrics.get('max_value_distance'),
+                  'max_recursive_depth': metrics.get('max_recursive_depth'),
+                  'semantic_ouroboros_index': metrics.get('semantic_ouroboros_index'),
+                  'chain_expansions': metrics.get('chain_expansions'),
+                  'chain_truncated': metrics.get('chain_truncated'),
+                  'diagnostics': len(payload.get('semantic', {}).get('diagnostics') or []),
+              },
               'timings': timings,
           }
           Path('out/linux-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
