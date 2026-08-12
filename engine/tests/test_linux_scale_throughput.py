@@ -136,3 +136,31 @@ def test_timings_json_checkpoints_real_scan_progress(tmp_path) -> None:
     assert timings["semantic_total_seconds"] >= 0.0
     assert timings["json_write_seconds"] >= 0.0
     assert output_path.exists()
+
+
+def test_timings_write_failure_is_reported_once(tmp_path, monkeypatch, capsys) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("value = 1\n", encoding="utf-8")
+    writes = 0
+
+    def fail_write_timings(*args, **kwargs):
+        nonlocal writes
+        writes += 1
+        raise OSError("timing volume unavailable")
+
+    monkeypatch.setattr(cli_module, "_write_timings", fail_write_timings)
+
+    result = cli_module.main([
+        str(repo),
+        "--canonical",
+        "--quiet",
+        "--timings-json",
+        str(tmp_path / "timings.json"),
+    ])
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert writes == 1
+    assert "could not write timings" in captured.out.lower()
+    assert "timing volume unavailable" in captured.out
