@@ -1,6 +1,6 @@
 {
   "name": "Ouroboros",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "source_model": "direct-package-source",
   "lineage": {
     "original_repository": "acrinym/Secretprojects",
@@ -8,5 +8,5 @@
     "original_pr": 66,
     "original_merge_commit": "8dd80c3a0755f6990c8461e30c73b27b2f62d7f8"
   },
-  "notes": "0.14 adds Evolution Movie on top of bounded history and Repository Anatomy. Every accepted first-parent commit is scanned from an inert git archive snapshot and rendered with the existing deterministic spatial layout; adjacent frames expose exact file appearance, disappearance, growth, shrinkage, category changes, and canonical value-distance changes. The original rating, semantic measurement formula, target-code execution policy, and non-judgmental product boundary remain unchanged."
+  "notes": "0.15 adds Repository Metabolism / Dormancy Atlas. It keeps absolute machinery and product code-line mass beside relative composition, reuses inert exact bounded first-parent history, and records last observed structural-use evidence for current files. Evidence classes distinguish active, dormant, superseded, archive, bounded-orphan, and insufficient-evidence states without turning absence into a safe-delete claim. Evolution Movie playback is also repaired so Play invokes the timer rather than returning the start function. The original rating, semantic measurement formula, exact-only canonical topology, target-code execution policy, and non-judgmental product boundary remain unchanged."
 }
