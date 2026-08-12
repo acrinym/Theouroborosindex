@@ -1,6 +1,6 @@
 # Repository Metabolism / Dormancy Atlas
 
-Ouroboros 0.15 adds a bounded answer to a practical repository question: **what is still observably doing something, and what may be trimmable?**
+Ouroboros 0.15 introduced a bounded answer to a practical repository question: **what is still observably doing something, and what may be trimmable?** Ouroboros 0.16 extends that evidence across explicit build/runtime boundaries that are themselves reached from recognized workflow, test, or manifest surfaces.
 
 This is descriptive structural evidence, not a cleanup bot or repository-health grader.
 
@@ -33,11 +33,14 @@ For each historical snapshot, Ouroboros reuses its inert static authorities and 
 - resolved local file dependencies;
 - explicit Capability Atlas surfaces;
 - files inside bounded exact capability neighborhoods;
-- literal repository-path references from recognized workflow, test, and manifest surfaces.
+- literal repository-path references from recognized workflow, test, and manifest surfaces;
+- literal repository-path references reached through a workflow/test/manifest-referenced script or structured build/config file.
 
 The last commit where any supported channel observes a current path is retained as that path's **last observed use inside the selected window**.
 
-Static workflow/test/manifest mentions remain their own evidence channel. They are not promoted into canonical semantic topology.
+Static boundary evidence remains separate from canonical semantic topology. A workflow/test/manifest surface can establish the first trusted edge into build/runtime orchestration; Ouroboros can then follow exact literal repository-relative or source-relative references through recognized script/config file types. Disconnected scripts do not become trusted merely because they reference one another, so a dead cycle cannot self-resurrect as active.
+
+This extension was motivated by the live `acrinym/zork1` proving ground. For example, the Creative Natural Play workflow invokes `glulx/creative-natural-play/qualify.sh`, which explicitly drives `stage.py`, `patch-series.json`, verification helpers, and other release machinery. Those downstream files are operationally reached from a real workflow boundary even when they have no ordinary import edge.
 
 ## Evidence classes
 
