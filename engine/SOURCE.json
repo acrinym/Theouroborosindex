@@ -1,6 +1,6 @@
 {
   "name": "Ouroboros",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "source_model": "direct-package-source",
   "lineage": {
     "original_repository": "acrinym/Secretprojects",
@@ -8,5 +8,5 @@
     "original_pr": 66,
     "original_merge_commit": "8dd80c3a0755f6990c8461e30c73b27b2f62d7f8"
   },
-  "notes": "0.12 keeps the original file-level Ouroboros rating as the fast scalar front door and adds a static Capability Atlas that maps explicit user/external surfaces to bounded EXACT-only implementation neighborhoods. It adds no quality verdict, merge gate, remediation system, crawler, service, or target-code execution."
+  "notes": "0.13 adds Value Paths on top of 0.12 Capability Atlas. A selected anchored capability is traced through bounded EXACT CALLS relationships only; probable and unresolved calls remain visible boundaries rather than canonical flow. The original rating, semantic measurement formula, target-code execution policy, and non-judgmental product boundary remain unchanged."
 }

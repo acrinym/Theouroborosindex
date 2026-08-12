@@ -20,6 +20,7 @@ from .indexing import (
     detect_analyzer_source_revision,
     load_manifest,
 )
+from .neighbors import MEASUREMENT_MODEL
 
 
 def _mib(value: float) -> int:
@@ -112,6 +113,15 @@ def _targets_from_args(args: argparse.Namespace) -> list[IndexTarget]:
     return targets
 
 
+def _stamp_measurement_model(record: dict) -> dict:
+    if record.get("status") != "ok":
+        return record
+    measurement = record.get("measurement")
+    if isinstance(measurement, dict):
+        measurement["measurement_model"] = MEASUREMENT_MODEL
+    return record
+
+
 def _friendly(record: dict) -> str:
     repository = record.get("repository", {}).get("name", "unknown")
     sha = record.get("repository", {}).get("sha")
@@ -164,7 +174,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     failures = 0
     for target in targets:
-        record = runner.run(target, successful_identity_keys=successful, refresh=args.refresh)
+        record = _stamp_measurement_model(
+            runner.run(target, successful_identity_keys=successful, refresh=args.refresh)
+        )
         if record["status"] in {"ok", "failed"}:
             try:
                 corpus.append(record)
