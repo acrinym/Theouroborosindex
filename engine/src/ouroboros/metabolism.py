@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 import tempfile
@@ -272,6 +273,7 @@ def scan_repository_metabolism(
                     item.component.bytes,
                     item.component.code_lines,
                     item.component.category.value,
+                    hashlib.sha256(item.text.encode("utf-8")).hexdigest(),
                 )
                 first_seen.setdefault(path_value, metadata)
                 if index > 0 and (path_value not in previous_fingerprint or previous_fingerprint[path_value] != fingerprint[path_value]):

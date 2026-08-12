@@ -56,6 +56,7 @@ def test_metabolism_tracks_absolute_mass_last_use_and_superseded_candidates_with
     first = _commit(repo, "release 120 machinery")
 
     (repo / "tools" / "stage_release121.py").write_text("def stage():\n    return 121\n", encoding="utf-8")
+    (repo / "tools" / "lonely_tool.py").write_text("def lonely():\n    return 'sleepy'\n", encoding="utf-8")
     (repo / "src" / "app.py").write_text(
         "from tools.stage_release121 import stage\n"
         "def main():\n"
@@ -64,7 +65,7 @@ def test_metabolism_tracks_absolute_mass_last_use_and_superseded_candidates_with
         "    main()\n",
         encoding="utf-8",
     )
-    _commit(repo, "move to release 121 machinery")
+    second = _commit(repo, "move to release 121 machinery")
 
     (repo / ".github" / "workflows").mkdir(parents=True)
     (repo / ".github" / "workflows" / "release.yml").write_text(
@@ -98,7 +99,7 @@ def test_metabolism_tracks_absolute_mass_last_use_and_superseded_candidates_with
     lonely = rows["tools/lonely_tool.py"]
     assert lonely["status"] == "bounded-orphan-candidate"
     assert lonely["last_observed_use"] is None
-    assert lonely["last_observed_change"] is None
+    assert lonely["last_observed_change"]["sha"] == second
 
 
 def test_metabolism_report_is_self_contained_and_preserves_evidence_boundary():
