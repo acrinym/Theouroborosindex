@@ -4,7 +4,7 @@ import hashlib
 import re
 import shutil
 import tempfile
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -29,6 +29,11 @@ _MANIFEST_NAMES = {
     "pyproject.toml", "package.json", "package-lock.json", "cargo.toml", "cargo.lock",
     "go.mod", "go.sum", "pom.xml", "build.gradle", "build.gradle.kts",
     "requirements.txt", "setup.py", "setup.cfg", "makefile", "justfile",
+}
+_BOUNDARY_REFERENCE_SUFFIXES = {
+    ".sh", ".bash", ".zsh", ".fish", ".ps1",
+    ".py", ".rb", ".pl", ".js", ".mjs", ".cjs", ".ts",
+    ".json", ".toml", ".yaml", ".yml", ".ini", ".cfg",
 }
 _ARCHIVE_WORDS = ("handoff", "archive", "legacy", "history", "historical", "qualification", "release-notes")
 _VERSION_FAMILY_RE = re.compile(
@@ -60,6 +65,49 @@ def _reference_source(path: str, category: Category) -> bool:
     )
 
 
+def _boundary_reference_source(path: str) -> bool:
+    return PurePosixPath(path).suffix.lower() in _BOUNDARY_REFERENCE_SUFFIXES
+
+
+def _reference_forms(source: str, target: str) -> tuple[str, ...]:
+    source_parent = PurePosixPath(source).parent
+    target_path = PurePosixPath(target)
+    forms = {target, f"./{target}"}
+    try:
+        relative = PurePosixPath(".") if source_parent == PurePosixPath(".") else source_parent
+        source_parts = relative.parts if relative.parts != (".",) else ()
+        target_parts = target_path.parts
+        common = 0
+        while common < min(len(source_parts), len(target_parts)) and source_parts[common] == target_parts[common]:
+            common += 1
+        rel_parts = ("..",) * (len(source_parts) - common) + target_parts[common:]
+        if rel_parts:
+            rel = "/".join(rel_parts)
+            forms.add(rel)
+            if not rel.startswith("."):
+                forms.add(f"./{rel}")
+    except (TypeError, ValueError):
+        pass
+    return tuple(sorted(forms, key=lambda value: (-len(value), value)))
+
+
+def _contains_literal_path(text: str, form: str) -> bool:
+    if not form:
+        return False
+    # A basename should not match the tail of a different path. Multi-component
+    # repo-relative forms may validly appear after a variable prefix such as $ROOT/.
+    before = r"(?<![A-Za-z0-9_./-])" if "/" not in form else r"(?<![A-Za-z0-9_.-])"
+    after = r"(?![A-Za-z0-9_./-])"
+    return re.search(before + re.escape(form) + after, text) is not None
+
+
+def _matched_reference(source: str, target: str, text: str) -> str | None:
+    for form in _reference_forms(source, target):
+        if _contains_literal_path(text, form):
+            return form
+    return None
+
+
 def _snapshot_evidence(scanned: list, semantic) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     by_path = {item.component.path: item for item in scanned}
     paths = set(by_path)
@@ -70,6 +118,7 @@ def _snapshot_evidence(scanned: list, semantic) -> tuple[dict[str, dict[str, Any
             "capability_surface": [],
             "capability_reachable": [],
             "static_path_references": [],
+            "boundary_path_references": [],
         }
         for path in paths
     }
@@ -110,6 +159,9 @@ def _snapshot_evidence(scanned: list, semantic) -> tuple[dict[str, dict[str, Any
                 )
 
     candidates = sorted(paths, key=len, reverse=True)
+    queue: deque[tuple[str, str]] = deque()
+    queued: set[tuple[str, str]] = set()
+
     for item in scanned:
         source = item.component.path
         if not _reference_source(source, item.component.category):
@@ -118,8 +170,42 @@ def _snapshot_evidence(scanned: list, semantic) -> tuple[dict[str, dict[str, Any
         for target in candidates:
             if target == source:
                 continue
-            if target in text or f"./{target}" in text:
-                signals[target]["static_path_references"].append({"source": source})
+            matched = _matched_reference(source, target, text)
+            if matched is None:
+                continue
+            signals[target]["static_path_references"].append(
+                {"source": source, "reference": matched}
+            )
+            if _boundary_reference_source(target):
+                key = (target, source)
+                if key not in queued:
+                    queued.add(key)
+                    queue.append(key)
+
+    # Propagate exact literal references only from files that are themselves
+    # reached from a trusted workflow/test/manifest boundary. This captures
+    # build/runtime orchestration chains without letting disconnected script
+    # cycles self-declare as active.
+    while queue:
+        source, boundary = queue.popleft()
+        item = by_path.get(source)
+        if item is None:
+            continue
+        text = item.text
+        for target in candidates:
+            if target == source:
+                continue
+            matched = _matched_reference(source, target, text)
+            if matched is None:
+                continue
+            signals[target]["boundary_path_references"].append(
+                {"source": source, "boundary": boundary, "reference": matched}
+            )
+            if _boundary_reference_source(target):
+                key = (target, boundary)
+                if key not in queued:
+                    queued.add(key)
+                    queue.append(key)
 
     compact: dict[str, dict[str, Any]] = {}
     for path, groups in signals.items():
