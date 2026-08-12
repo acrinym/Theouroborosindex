@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repo-ouroboros"
-version = "0.17.0"
+version = "0.18.0"
 description = "See how much of a repository is product versus machinery around the product"
 requires-python = ">=3.10"
 dependencies = [
