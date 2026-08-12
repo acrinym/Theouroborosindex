@@ -1,0 +1,66 @@
+name: One-shot fix Repository Metabolism review
+
+on:
+  push:
+    branches:
+      - agent/metabolism-review-fix-runner-20260811
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/repository-metabolism-20260811
+          fetch-depth: 0
+      - name: Add content digest and regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('engine/src/ouroboros/metabolism.py')
+          text = p.read_text()
+          old = 'import re\nimport shutil\n'
+          new = 'import hashlib\nimport re\nimport shutil\n'
+          if old not in text:
+              raise SystemExit('import target not found')
+          text = text.replace(old, new, 1)
+          old = '                    item.component.category.value,\n                )\n'
+          new = '                    item.component.category.value,\n                    hashlib.sha256(item.text.encode("utf-8")).hexdigest(),\n                )\n'
+          if old not in text:
+              raise SystemExit('fingerprint target not found')
+          p.write_text(text.replace(old, new, 1))
+
+          t = Path('engine/tests/test_metabolism.py')
+          text = t.read_text()
+          old = '    (repo / "tools" / "stage_release121.py").write_text("def stage():\\n    return 121\\n", encoding="utf-8")\n'
+          new = '    (repo / "tools" / "stage_release121.py").write_text("def stage():\\n    return 121\\n", encoding="utf-8")\n    (repo / "tools" / "lonely_tool.py").write_text("def lonely():\\n    return \'sleepy\'\\n", encoding="utf-8")\n'
+          if old not in text:
+              raise SystemExit('same-size edit insertion target not found')
+          text = text.replace(old, new, 1)
+          old = '    _commit(repo, "move to release 121 machinery")\n'
+          new = '    second = _commit(repo, "move to release 121 machinery")\n'
+          if old not in text:
+              raise SystemExit('second commit target not found')
+          text = text.replace(old, new, 1)
+          old = '    assert lonely["last_observed_change"] is None\n'
+          new = '    assert lonely["last_observed_change"]["sha"] == second\n'
+          if old not in text:
+              raise SystemExit('change assertion target not found')
+          t.write_text(text.replace(old, new, 1))
+          PY
+      - name: Validate
+        run: |
+          python -m pip install --disable-pip-version-check -e 'engine[test]'
+          python -m compileall -q engine/src engine/tests
+          python -m pytest -q engine/tests
+      - name: Commit and push
+        run: |
+          git config user.name 'Onyx Product Train'
+          git config user.email 'actions@users.noreply.github.com'
+          git add engine/src/ouroboros/metabolism.py engine/tests/test_metabolism.py
+          git commit -m 'Track same-size content changes in metabolism history'
+          git push origin HEAD:agent/repository-metabolism-20260811
