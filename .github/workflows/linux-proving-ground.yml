@@ -1,0 +1,130 @@
+name: Linux proving ground
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-semantic:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.head_ref == 'agent/linux-proving-ground-20260811'
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Ouroboros analyzer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: index
+          persist-credentials: false
+
+      - name: Checkout pinned Linux target
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: torvalds/linux
+          ref: f5bbbfec59b4e2fb7520a91de3df8a6174325d6a
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.11'
+
+      - name: Install pinned benchmark toolchain and current Ouroboros engine
+        run: |
+          python -m pip install --disable-pip-version-check \
+            pip==25.1.1 setuptools==80.9.0 wheel==0.45.1
+          python -m pip install --disable-pip-version-check --no-build-isolation -e index/engine
+          python -m pip check
+
+      - name: Record target and runner facts
+        run: |
+          mkdir -p out
+          {
+            echo "analyzer_sha=$(git -C index rev-parse HEAD)"
+            echo "target_repo=torvalds/linux"
+            echo "target_sha=$(git -C target rev-parse HEAD)"
+            echo "runner_label=ubuntu-24.04"
+            echo "runner_image_os=${ImageOS:-unknown}"
+            echo "runner_image_version=${ImageVersion:-unknown}"
+            echo "python=$(python --version 2>&1)"
+            echo "pip=$(python -m pip --version)"
+            echo "setuptools=$(python -c 'import setuptools; print(setuptools.__version__)')"
+            echo "wheel=$(python -c 'import wheel; print(wheel.__version__)')"
+            echo "ouroboros=$(ouroboros --version)"
+            echo "runner=$(uname -a)"
+            echo "cpu_count=$(nproc)"
+            echo "memory_kib=$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
+            echo "target_disk_kib=$(du -sk target | awk '{print $1}')"
+            echo "installed_packages_begin"
+            python -m pip freeze --all
+            echo "installed_packages_end"
+          } | tee out/facts.txt
+
+      - name: Run full canonical Linux semantic scan
+        env:
+          OUROBOROS_ANALYZER_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -o pipefail
+          /usr/bin/time -v -o out/semantic-time.txt \
+            ouroboros target --canonical --quiet --json out/linux-semantic.json
+
+      - name: Summarize semantic result
+        if: success()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('out/linux-semantic.json')
+          try:
+              payload = json.loads(path.read_text())
+          except json.JSONDecodeError as exc:
+              raise SystemExit(
+                  f"Linux proving ground produced malformed semantic JSON at {path}: "
+                  f"line {exc.lineno}, column {exc.colno}: {exc.msg}"
+              ) from exc
+
+          metrics = payload['semantic']['metrics']
+          summary = {
+              'repository': 'torvalds/linux',
+              'repository_sha': 'f5bbbfec59b4e2fb7520a91de3df8a6174325d6a',
+              'analyzer_sha': payload.get('analyzer', {}).get('source_head'),
+              'files': payload.get('totals', {}).get('files'),
+              'code_lines': payload.get('totals', {}).get('code_lines'),
+              'symbols': metrics.get('symbol_count'),
+              'edges': metrics.get('edge_count'),
+              'exact_resolution_rate': metrics.get('exact_resolution_rate'),
+              'resolution_rate': metrics.get('resolution_rate'),
+              'max_recursive_depth': metrics.get('max_recursive_depth'),
+              'semantic_ouroboros_index': metrics.get('semantic_ouroboros_index'),
+              'diagnostics': len(payload.get('semantic', {}).get('diagnostics') or []),
+          }
+          Path('out/linux-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Show resource measurements
+        if: always()
+        run: |
+          cat out/facts.txt || true
+          cat out/semantic-time.txt || true
+          du -sh out || true
+
+      - name: Upload Linux proving-ground evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-proving-ground-${{ github.event.pull_request.head.sha || github.sha }}
+          path: out/
+          if-no-files-found: warn
+          retention-days: 30
