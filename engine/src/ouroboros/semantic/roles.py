@@ -108,21 +108,29 @@ def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFi
     keyword classifier layered on top of the first one.
     """
 
-    text_by_path = {item.component.path: item.text for item in scanned_files}
+    # Linux-scale repositories can have hundreds or thousands of symbols in a
+    # single source file. Splitting the same complete file text and re-tokenizing
+    # the same path for every symbol makes refinement scale with symbols * file
+    # length instead of the actual symbol snippets. Build those immutable per-file
+    # views once and reuse them for every symbol in that file.
+    lines_by_path = {item.component.path: item.text.splitlines() for item in scanned_files}
+    path_role_by_path = {path: _path_role(path) for path in lines_by_path}
+    product_context_by_path = {path: _product_context(path) for path in lines_by_path}
+
     for symbol in graph.symbols.values():
         if symbol.kind == SymbolKind.FILE:
             symbol.role_confidence = 1.0
             symbol.role_source = "file-classification"
             continue
 
-        path_role = _path_role(symbol.path)
+        path_role = path_role_by_path.get(symbol.path)
         if path_role is not None:
             symbol.category = path_role
             symbol.role_confidence = 0.98
             symbol.role_source = "strong-path-role"
             continue
 
-        lines = text_by_path.get(symbol.path, "").splitlines()
+        lines = lines_by_path.get(symbol.path, ())
         start = max(0, symbol.start_line - 1)
         end = max(start + 1, min(len(lines), symbol.end_line))
         snippet = "\n".join(lines[start:end])
@@ -151,6 +159,6 @@ def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFi
                 symbol.role_source = "symbol-local-machinery-evidence"
                 continue
 
-        symbol.category = Category.CORE_PRODUCT if _product_context(symbol.path) else Category.ESSENTIAL_SUPPORT
+        symbol.category = Category.CORE_PRODUCT if product_context_by_path.get(symbol.path, False) else Category.ESSENTIAL_SUPPORT
         symbol.role_confidence = 0.68 if symbol.category == Category.CORE_PRODUCT else 0.62
         symbol.role_source = "mixed-file-context-fallback"
