@@ -1,0 +1,46 @@
+name: One-shot validate Repository Metabolism
+
+on:
+  push:
+    branches:
+      - agent/metabolism-validation-runner-20260811
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact 0.15 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/repository-metabolism-20260811
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install --disable-pip-version-check -e 'engine[test]'
+      - name: Compile and full test suite
+        run: |
+          python -m compileall -q engine/src engine/tests
+          python -m pytest -q engine/tests
+          ouroboros-metabolism --version
+          ouroboros-movie --version
+      - name: Smoke metabolism on analyzer history
+        run: |
+          FROM="$(git rev-list --first-parent --max-count=3 HEAD | tail -n 1)"
+          ouroboros-metabolism . --from "$FROM" --to HEAD --max-commits 3 --json /tmp/metabolism.json --report /tmp/metabolism.html
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('/tmp/metabolism.json').read_text())
+          assert p['range']['commits_scanned'] == 3
+          assert p['policy']['target_execution'] is False
+          assert p['policy']['deletion_recommendation'] is False
+          assert 'machinery_lines' in p['mass']['current']
+          assert Path('/tmp/metabolism.html').exists()
+          print(p['status_counts'])
+          PY
