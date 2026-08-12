@@ -19,6 +19,10 @@ from .scanner import scan_repository
 from .semantic import build_semantic_graph
 
 
+class _TimingCheckpointError(OSError):
+    """Raised once when requested timing telemetry cannot be persisted."""
+
+
 def _percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
@@ -221,6 +225,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     timings: dict[str, Any] | None = None
     checkpoint: Callable[[], None] | None = None
+    checkpoint_failed = False
     if args.timings_path:
         timings = {
             "schema": {"name": "ouroboros-scan-timings", "version": 1},
@@ -228,8 +233,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             "repository": str(root),
             "stage": "starting",
         }
-        checkpoint = lambda: _write_timings(args.timings_path, timings)  # noqa: E731
-        checkpoint()
+
+        def persist_checkpoint() -> None:
+            nonlocal checkpoint_failed
+            if checkpoint_failed:
+                return
+            try:
+                _write_timings(args.timings_path, timings)
+            except OSError as exc:
+                checkpoint_failed = True
+                raise _TimingCheckpointError(str(exc)) from exc
+
+        checkpoint = persist_checkpoint
+        try:
+            checkpoint()
+        except _TimingCheckpointError as exc:
+            print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+            return 2
 
     try:
         baseline, semantic = scan(
@@ -238,11 +258,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             timings=timings,
             checkpoint=checkpoint,
         )
+    except _TimingCheckpointError as exc:
+        print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+        return 2
     except (OSError, ValueError) as exc:
         if timings is not None:
             timings.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
             assert checkpoint is not None
-            checkpoint()
+            try:
+                checkpoint()
+            except _TimingCheckpointError as timing_exc:
+                print(f"Ouroboros could not write timings {args.timings_path}: {timing_exc}")
         print(f"Ouroboros could not scan {root}: {exc}")
         return 2
 
@@ -263,13 +289,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             if timings is not None:
                 timings.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
                 assert checkpoint is not None
-                checkpoint()
+                try:
+                    checkpoint()
+                except _TimingCheckpointError as timing_exc:
+                    print(f"Ouroboros could not write timings {args.timings_path}: {timing_exc}")
             print(f"Ouroboros could not write {target}: {exc}")
             return 2
         if timings is not None:
             timings["json_write_seconds"] = perf_counter() - json_started
             assert checkpoint is not None
-            checkpoint()
+            try:
+                checkpoint()
+            except _TimingCheckpointError as exc:
+                print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+                return 2
         if not args.quiet:
             print(f"\nFull JSON saved to: {target.resolve()}")
 
@@ -280,7 +313,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if timings is not None:
                 timings.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
                 assert checkpoint is not None
-                checkpoint()
+                try:
+                    checkpoint()
+                except _TimingCheckpointError as timing_exc:
+                    print(f"Ouroboros could not write timings {args.timings_path}: {timing_exc}")
             print(f"Ouroboros could not write report {args.report_path}: {exc}")
             return 2
         if not args.quiet:
@@ -289,7 +325,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if timings is not None:
         timings.update({"status": "complete", "stage": "complete"})
         assert checkpoint is not None
-        checkpoint()
+        try:
+            checkpoint()
+        except _TimingCheckpointError as exc:
+            print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+            return 2
     return 0
 
 
