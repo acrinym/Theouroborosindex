@@ -7,6 +7,7 @@ import ouroboros.cli as cli_module
 import ouroboros.scanner as scanner_module
 from ouroboros.model import Category, Component
 from ouroboros.scanner import ScannedFile
+from ouroboros.semantic.adapters import TreeSitterAdapter
 from ouroboros.semantic.model import SemanticGraph, Symbol, SymbolKind
 from ouroboros.semantic.roles import _snippet_prefix, refine_symbol_categories
 
@@ -78,6 +79,27 @@ def test_scanner_reuses_one_line_view_per_file(tmp_path, monkeypatch) -> None:
     assert observed_line_views[0] == observed_line_views[1]
     assert scanned[0].component.lines == 3
     assert scanned[0].component.code_lines == 2
+
+
+def test_tree_sitter_adapter_caches_one_parser_per_language(monkeypatch) -> None:
+    import tree_sitter_language_pack
+
+    calls: list[str] = []
+
+    def fake_get_parser(name: str):
+        calls.append(name)
+        return object()
+
+    monkeypatch.setattr(tree_sitter_language_pack, "get_parser", fake_get_parser)
+    adapter = TreeSitterAdapter()
+
+    first_c = adapter._parser_for("c")
+    second_c = adapter._parser_for("c")
+    cpp = adapter._parser_for("cpp")
+
+    assert first_c is second_c
+    assert cpp is not first_c
+    assert calls == ["c", "cpp"]
 
 
 class _CountingText(str):
