@@ -4,10 +4,11 @@ import json
 
 import ouroboros.analyze as analyze_module
 import ouroboros.cli as cli_module
+import ouroboros.scanner as scanner_module
 from ouroboros.model import Category, Component
 from ouroboros.scanner import ScannedFile
 from ouroboros.semantic.model import SemanticGraph, Symbol, SymbolKind
-from ouroboros.semantic.roles import refine_symbol_categories
+from ouroboros.semantic.roles import _snippet_prefix, refine_symbol_categories
 
 
 def test_canonical_scan_reads_repository_once(tmp_path, monkeypatch) -> None:
@@ -41,6 +42,42 @@ def test_canonical_scan_reads_repository_once(tmp_path, monkeypatch) -> None:
     assert len(baseline.components) == 1
     assert semantic.metrics is not None
     assert semantic.metrics.symbol_count >= 2
+
+
+def test_scanner_reuses_one_line_view_per_file(tmp_path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "driver.c").write_text(
+        "/* driver */\n"
+        "#include <linux/types.h>\n"
+        "int answer(void) { return 42; }\n",
+        encoding="utf-8",
+    )
+
+    real_looks_generated = scanner_module._looks_generated
+    real_code_lines = scanner_module._code_lines
+    observed_line_views: list[int] = []
+
+    def observing_looks_generated(text, lines=None):
+        assert lines is not None
+        observed_line_views.append(id(lines))
+        return real_looks_generated(text, lines)
+
+    def observing_code_lines(text, language, lines=None):
+        assert lines is not None
+        observed_line_views.append(id(lines))
+        return real_code_lines(text, language, lines)
+
+    monkeypatch.setattr(scanner_module, "_looks_generated", observing_looks_generated)
+    monkeypatch.setattr(scanner_module, "_code_lines", observing_code_lines)
+
+    scanned = scanner_module.scan_repository(repo)
+
+    assert len(scanned) == 1
+    assert len(observed_line_views) == 2
+    assert observed_line_views[0] == observed_line_views[1]
+    assert scanned[0].component.lines == 3
+    assert scanned[0].component.code_lines == 2
 
 
 class _CountingText(str):
@@ -99,6 +136,17 @@ def test_symbol_role_refinement_splits_each_file_once() -> None:
     # The file text is materialized into lines once, regardless of symbol count.
     # The previous implementation split the complete 200-line file once per symbol.
     assert text.split_calls == 1
+
+
+def test_role_snippet_prefix_preserves_previous_4000_character_view() -> None:
+    lines = [
+        "alpha " + ("a" * 2500),
+        "beta " + ("b" * 2500),
+        "gamma " + ("c" * 2500),
+    ]
+
+    assert _snippet_prefix(lines, 0, len(lines)) == "\n".join(lines)[:4000]
+    assert _snippet_prefix(lines, 1, len(lines)) == "\n".join(lines[1:])[:4000]
 
 
 def test_timings_json_checkpoints_real_scan_progress(tmp_path) -> None:
