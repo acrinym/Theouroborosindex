@@ -8,12 +8,14 @@ The canonical scan of `torvalds/linux@f5bbbfec59b4e2fb7520a91de3df8a6174325d6a` 
 
 ## Concrete throughput defects found
 
-Static inspection of the canonical path exposed two avoidable scaling costs:
+Static inspection of the canonical path exposed four avoidable scaling costs:
 
 1. `ouroboros.cli.scan()` called `analyze_repository()`, which scanned, decoded, counted, classified, and resolved the entire repository, and then repeated `scan_repository()`, classification, and dependency resolution again before building the semantic graph.
-2. `refine_symbol_categories()` called `splitlines()` on the complete source text once for every non-file symbol. A large C translation unit with many declarations therefore repeatedly rebuilt the same line array.
+2. `scan_repository()` independently split each decoded source file into lines for generated-header detection, total-line counting, and code-line counting even though all three operations use the same immutable line view.
+3. `refine_symbol_categories()` called `splitlines()` on the complete source text once for every non-file symbol. A large C translation unit with many declarations therefore repeatedly rebuilt the same line array.
+4. Role refinement joined the complete line range for a symbol even though local role scoring examines only the first 4,000 characters of that snippet.
 
-0.18 removes both costs without changing category rules, relationship-resolution rules, or semantic scoring constants.
+0.18 removes those costs without changing category rules, relationship-resolution rules, or semantic scoring constants. Repository scanning now shares one line view per source file. Semantic role refinement groups symbols by source file, splits one file at a time so the temporary line view can be released before the next file, and builds only the exact 4,000-character prefix that the existing scoring rule already consumed.
 
 ## Measurement additions
 
