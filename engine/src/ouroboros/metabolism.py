@@ -274,7 +274,7 @@ def scan_repository_metabolism(
                     item.component.category.value,
                 )
                 first_seen.setdefault(path_value, metadata)
-                if path_value not in previous_fingerprint or previous_fingerprint[path_value] != fingerprint[path_value]:
+                if index > 0 and (path_value not in previous_fingerprint or previous_fingerprint[path_value] != fingerprint[path_value]):
                     changed_history[path_value] = metadata
                 if signals.get(path_value, {}).get("active"):
                     use_history[path_value] = metadata

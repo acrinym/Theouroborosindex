@@ -98,6 +98,7 @@ def test_metabolism_tracks_absolute_mass_last_use_and_superseded_candidates_with
     lonely = rows["tools/lonely_tool.py"]
     assert lonely["status"] == "bounded-orphan-candidate"
     assert lonely["last_observed_use"] is None
+    assert lonely["last_observed_change"] is None
 
 
 def test_metabolism_report_is_self_contained_and_preserves_evidence_boundary():
