@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import json
+
+import ouroboros.analyze as analyze_module
+import ouroboros.cli as cli_module
+from ouroboros.model import Category, Component
+from ouroboros.scanner import ScannedFile
+from ouroboros.semantic.model import SemanticGraph, Symbol, SymbolKind
+from ouroboros.semantic.roles import refine_symbol_categories
+
+
+def test_canonical_scan_reads_repository_once(tmp_path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "main.py").write_text(
+        "def greet(name):\n"
+        "    return f'hello {name}'\n\n"
+        "def main():\n"
+        "    return greet('world')\n",
+        encoding="utf-8",
+    )
+
+    real_scan_repository = cli_module.scan_repository
+    calls = 0
+
+    def counting_scan_repository(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_scan_repository(*args, **kwargs)
+
+    # Before the Linux-scale throughput fix, cli.scan() called analyze_repository()
+    # (which scanned once) and then scan_repository() again for semantics. Count
+    # both import sites so this regression test would catch that duplicate pass.
+    monkeypatch.setattr(cli_module, "scan_repository", counting_scan_repository)
+    monkeypatch.setattr(analyze_module, "scan_repository", counting_scan_repository)
+
+    baseline, semantic = cli_module.scan(repo, use_repo_config=False)
+
+    assert calls == 1
+    assert len(baseline.components) == 1
+    assert semantic.metrics is not None
+    assert semantic.metrics.symbol_count >= 2
+
+
+class _CountingText(str):
+    def __new__(cls, value: str):
+        instance = super().__new__(cls, value)
+        instance.split_calls = 0
+        return instance
+
+    def splitlines(self, *args, **kwargs):
+        self.split_calls += 1
+        return super().splitlines(*args, **kwargs)
+
+
+def test_symbol_role_refinement_splits_each_file_once() -> None:
+    text = _CountingText("\n".join(f"line_{index} = {index}" for index in range(1, 201)))
+    component = Component(
+        path="src/domain.py",
+        language="python",
+        lines=200,
+        code_lines=200,
+        bytes=len(text.encode("utf-8")),
+        category=Category.CORE_PRODUCT,
+    )
+    scanned = ScannedFile(component=component, text=text)
+    graph = SemanticGraph()
+    graph.add_symbols([
+        Symbol(
+            id="src/domain.py::<file>",
+            path="src/domain.py",
+            language="python",
+            kind=SymbolKind.FILE,
+            name="domain.py",
+            qualified_name="src/domain.py",
+            start_line=1,
+            end_line=200,
+            category=Category.CORE_PRODUCT,
+        ),
+        *[
+            Symbol(
+                id=f"src/domain.py::symbol_{index}@{index}",
+                path="src/domain.py",
+                language="python",
+                kind=SymbolKind.FUNCTION,
+                name=f"symbol_{index}",
+                qualified_name=f"symbol_{index}",
+                start_line=index,
+                end_line=index,
+                category=Category.CORE_PRODUCT,
+            )
+            for index in range(1, 101)
+        ],
+    ])
+
+    refine_symbol_categories(graph, [scanned])
+
+    # The file text is materialized into lines once, regardless of symbol count.
+    # The previous implementation split the complete 200-line file once per symbol.
+    assert text.split_calls == 1
+
+
+def test_timings_json_checkpoints_real_scan_progress(tmp_path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text(
+        "class Greeter:\n"
+        "    def greet(self, name):\n"
+        "        return name.upper()\n",
+        encoding="utf-8",
+    )
+    timings_path = tmp_path / "timings.json"
+    output_path = tmp_path / "scan.json"
+
+    result = cli_module.main([
+        str(repo),
+        "--canonical",
+        "--quiet",
+        "--timings-json",
+        str(timings_path),
+        "--json",
+        str(output_path),
+    ])
+
+    assert result == 0
+    timings = json.loads(timings_path.read_text(encoding="utf-8"))
+    assert timings["status"] == "complete"
+    assert timings["stage"] == "complete"
+    assert timings["scanned_files"] == 1
+    assert timings["semantic_files_total"] == 1
+    assert timings["semantic_files_parsed"] == 1
+    assert timings["semantic_stage"] == "complete"
+    assert timings["repository_scan_seconds"] >= 0.0
+    assert timings["baseline_analysis_seconds"] >= 0.0
+    assert timings["semantic_total_seconds"] >= 0.0
+    assert timings["json_write_seconds"] >= 0.0
+    assert output_path.exists()
