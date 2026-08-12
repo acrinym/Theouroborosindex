@@ -8,20 +8,25 @@ from .graph import assign_value_distances, find_audit_chains, resolve_dependenci
 from .metrics import compute_metrics
 from .model import Analysis, Category
 from .profiles import directory_profiles
-from .scanner import scan_repository
+from .scanner import ScannedFile, scan_repository
 
 
-def analyze_repository(path: str | Path, *, use_repo_config: bool = True) -> Analysis:
-    root = Path(path).expanduser().resolve()
-    if not root.exists() or not root.is_dir():
-        raise ValueError(f"Repository path does not exist or is not a directory: {root}")
+def analyze_scanned_repository(
+    root: Path,
+    scanned: list[ScannedFile],
+    *,
+    config: Config | None = None,
+    warnings: list[str] | None = None,
+) -> Analysis:
+    """Build the file-level analysis from an existing repository scan.
 
-    config = load_config(root) if use_repo_config else Config()
-    warnings: list[str] = []
-    scanned = [
-        item for item in scan_repository(root, warnings=warnings)
-        if not config.ignored(item.component.path)
-    ]
+    This keeps the canonical CLI from rereading and re-tokenizing every file a
+    second time before semantic analysis. The supplied ``ScannedFile`` objects
+    remain the authority for both file-level and semantic views.
+    """
+
+    config = config or Config()
+    warnings = warnings if warnings is not None else []
     components = [classify(item, override=config.category_for(item.component.path)) for item in scanned]
     graph = resolve_dependencies(components)
     assign_value_distances(components, graph)
@@ -45,3 +50,17 @@ def analyze_repository(path: str | Path, *, use_repo_config: bool = True) -> Ana
         directory_profiles=profiles,
         warnings=warnings,
     )
+
+
+def analyze_repository(path: str | Path, *, use_repo_config: bool = True) -> Analysis:
+    root = Path(path).expanduser().resolve()
+    if not root.exists() or not root.is_dir():
+        raise ValueError(f"Repository path does not exist or is not a directory: {root}")
+
+    config = load_config(root) if use_repo_config else Config()
+    warnings: list[str] = []
+    scanned = [
+        item for item in scan_repository(root, warnings=warnings)
+        if not config.ignored(item.component.path)
+    ]
+    return analyze_scanned_repository(root, scanned, config=config, warnings=warnings)
