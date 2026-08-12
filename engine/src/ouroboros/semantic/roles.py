@@ -65,6 +65,28 @@ def _product_context(path: str) -> bool:
     return bool(_tokens(parent) & _PRODUCT_PARENT_WORDS)
 
 
+def _snippet_prefix(lines: list[str], start: int, end: int, limit: int = 4000) -> str:
+    """Return exactly the requested prefix without joining the entire symbol body."""
+
+    chunks: list[str] = []
+    remaining = limit
+    for line_index in range(start, end):
+        if chunks:
+            if remaining <= 0:
+                break
+            chunks.append("\n")
+            remaining -= 1
+        if remaining <= 0:
+            break
+        line = lines[line_index]
+        piece = line[:remaining]
+        chunks.append(piece)
+        remaining -= len(piece)
+        if len(piece) < len(line):
+            break
+    return "".join(chunks)
+
+
 def _score_local(symbol: Symbol, snippet: str) -> dict[Category, float]:
     scores: dict[Category, float] = defaultdict(float)
     name_tokens = _tokens(symbol.name) | _tokens(symbol.qualified_name)
@@ -108,57 +130,60 @@ def refine_symbol_categories(graph: SemanticGraph, scanned_files: list[ScannedFi
     keyword classifier layered on top of the first one.
     """
 
-    # Linux-scale repositories can have hundreds or thousands of symbols in a
-    # single source file. Splitting the same complete file text and re-tokenizing
-    # the same path for every symbol makes refinement scale with symbols * file
-    # length instead of the actual symbol snippets. Build those immutable per-file
-    # views once and reuse them for every symbol in that file.
-    lines_by_path = {item.component.path: item.text.splitlines() for item in scanned_files}
-    path_role_by_path = {path: _path_role(path) for path in lines_by_path}
-    product_context_by_path = {path: _product_context(path) for path in lines_by_path}
-
+    # Group symbols by source file so a Linux-scale translation unit is split into
+    # lines once, refined as a unit, and then released before the next file. This
+    # avoids both per-symbol full-file splitting and a second all-repository line
+    # copy in memory.
+    text_by_path = {item.component.path: item.text for item in scanned_files}
+    symbols_by_path: dict[str, list[Symbol]] = defaultdict(list)
     for symbol in graph.symbols.values():
-        if symbol.kind == SymbolKind.FILE:
-            symbol.role_confidence = 1.0
-            symbol.role_source = "file-classification"
-            continue
+        symbols_by_path[symbol.path].append(symbol)
 
-        path_role = path_role_by_path.get(symbol.path)
-        if path_role is not None:
-            symbol.category = path_role
-            symbol.role_confidence = 0.98
-            symbol.role_source = "strong-path-role"
-            continue
+    for path, symbols in symbols_by_path.items():
+        path_role = _path_role(path)
+        product_context = _product_context(path)
+        lines = text_by_path.get(path, "").splitlines()
 
-        lines = lines_by_path.get(symbol.path, ())
-        start = max(0, symbol.start_line - 1)
-        end = max(start + 1, min(len(lines), symbol.end_line))
-        snippet = "\n".join(lines[start:end])
-        best = _best_local(_score_local(symbol, snippet))
-
-        # Product/support is sticky. Domain concepts frequently reuse machinery words,
-        # so lexical evidence alone is not allowed to promote them to machinery.
-        if symbol.category not in MACHINERY_CATEGORIES:
-            if best is not None:
-                best_category, score, second = best
-                if best_category not in MACHINERY_CATEGORIES and score >= 5.0 and score - second >= 0.5:
-                    symbol.category = best_category
-                    symbol.role_confidence = min(0.95, 0.66 + 0.04 * score)
-                    symbol.role_source = "symbol-local-product-evidence"
-                    continue
-            symbol.role_confidence = 0.72 if symbol.category in PRODUCT_CATEGORIES else 0.62
-            symbol.role_source = "file-seed-preserved"
-            continue
-
-        # Machinery-seeded neutral files are where local refinement earns its keep.
-        if best is not None:
-            best_category, score, second = best
-            if best_category in MACHINERY_CATEGORIES and score >= 5.0 and score - second >= 0.5:
-                symbol.category = best_category
-                symbol.role_confidence = min(0.97, 0.68 + 0.04 * score)
-                symbol.role_source = "symbol-local-machinery-evidence"
+        for symbol in symbols:
+            if symbol.kind == SymbolKind.FILE:
+                symbol.role_confidence = 1.0
+                symbol.role_source = "file-classification"
                 continue
 
-        symbol.category = Category.CORE_PRODUCT if product_context_by_path.get(symbol.path, False) else Category.ESSENTIAL_SUPPORT
-        symbol.role_confidence = 0.68 if symbol.category == Category.CORE_PRODUCT else 0.62
-        symbol.role_source = "mixed-file-context-fallback"
+            if path_role is not None:
+                symbol.category = path_role
+                symbol.role_confidence = 0.98
+                symbol.role_source = "strong-path-role"
+                continue
+
+            start = max(0, symbol.start_line - 1)
+            end = max(start + 1, min(len(lines), symbol.end_line))
+            snippet = _snippet_prefix(lines, start, end)
+            best = _best_local(_score_local(symbol, snippet))
+
+            # Product/support is sticky. Domain concepts frequently reuse machinery words,
+            # so lexical evidence alone is not allowed to promote them to machinery.
+            if symbol.category not in MACHINERY_CATEGORIES:
+                if best is not None:
+                    best_category, score, second = best
+                    if best_category not in MACHINERY_CATEGORIES and score >= 5.0 and score - second >= 0.5:
+                        symbol.category = best_category
+                        symbol.role_confidence = min(0.95, 0.66 + 0.04 * score)
+                        symbol.role_source = "symbol-local-product-evidence"
+                        continue
+                symbol.role_confidence = 0.72 if symbol.category in PRODUCT_CATEGORIES else 0.62
+                symbol.role_source = "file-seed-preserved"
+                continue
+
+            # Machinery-seeded neutral files are where local refinement earns its keep.
+            if best is not None:
+                best_category, score, second = best
+                if best_category in MACHINERY_CATEGORIES and score >= 5.0 and score - second >= 0.5:
+                    symbol.category = best_category
+                    symbol.role_confidence = min(0.97, 0.68 + 0.04 * score)
+                    symbol.role_source = "symbol-local-machinery-evidence"
+                    continue
+
+            symbol.category = Category.CORE_PRODUCT if product_context else Category.ESSENTIAL_SUPPORT
+            symbol.role_confidence = 0.68 if symbol.category == Category.CORE_PRODUCT else 0.62
+            symbol.role_source = "mixed-file-context-fallback"
