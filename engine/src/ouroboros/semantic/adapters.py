@@ -217,8 +217,20 @@ _IMPORT_NODE_TYPES = {
 class TreeSitterAdapter:
     MAX_WALK_DEPTH = 400
 
+    def __init__(self) -> None:
+        self._parsers: dict[str, object] = {}
+
     def supports(self, language: str) -> bool:
         return language in TREE_SITTER_LANGUAGE_KEYS
+
+    def _parser_for(self, language: str):
+        parser_key = TREE_SITTER_LANGUAGE_KEYS[language]
+        parser = self._parsers.get(parser_key)
+        if parser is None:
+            from tree_sitter_language_pack import get_parser
+            parser = get_parser(parser_key)
+            self._parsers[parser_key] = parser
+        return parser
 
     def parse(self, item: ScannedFile) -> ParsedUnit:
         unit = ParsedUnit(path=item.component.path, language=item.component.language)
@@ -230,8 +242,7 @@ class TreeSitterAdapter:
         )
         unit.symbols.append(file_symbol)
         try:
-            from tree_sitter_language_pack import get_parser
-            parser = get_parser(TREE_SITTER_LANGUAGE_KEYS[item.component.language])
+            parser = self._parser_for(item.component.language)
             source = item.text.encode("utf-8")
             tree = parser.parse(source)
         except Exception as exc:

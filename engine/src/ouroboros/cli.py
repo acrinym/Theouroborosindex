@@ -3,20 +3,24 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Callable, MutableMapping
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Sequence
 
 from . import __version__
-from .analyze import analyze_repository
+from .analyze import analyze_repository, analyze_scanned_repository
 from .anatomy import anatomy_fingerprint
-from .classify import classify
 from .config import Config, load_config
-from .graph import resolve_dependencies
 from .identity import static_git_sha
 from .living_report import write_living_report
 from .neighbors import MEASUREMENT_MODEL
 from .scanner import scan_repository
 from .semantic import build_semantic_graph
+
+
+class _TimingCheckpointError(OSError):
+    """Raised once when requested timing telemetry cannot be persisted."""
 
 
 def _percent(value: float) -> str:
@@ -75,14 +79,67 @@ def _friendly_summary(path: Path, baseline, semantic) -> str:
     return "\n".join(lines)
 
 
-def scan(path: str | Path, *, use_repo_config: bool = True) -> tuple[Any, Any]:
+def scan(
+    path: str | Path,
+    *,
+    use_repo_config: bool = True,
+    timings: MutableMapping[str, Any] | None = None,
+    checkpoint: Callable[[], None] | None = None,
+) -> tuple[Any, Any]:
+    """Run the canonical file and semantic analyses from one shared source scan."""
+
+    total_started = perf_counter()
     root = Path(path).expanduser().resolve()
-    baseline = analyze_repository(root, use_repo_config=use_repo_config)
+    if not root.exists() or not root.is_dir():
+        raise ValueError(f"Repository path does not exist or is not a directory: {root}")
     config = load_config(root) if use_repo_config else Config()
-    scanned = [item for item in scan_repository(root) if not config.ignored(item.component.path)]
-    components = [classify(item, override=config.category_for(item.component.path)) for item in scanned]
-    file_graph = resolve_dependencies(components)
-    semantic = build_semantic_graph(scanned, file_dependencies=file_graph)
+    warnings: list[str] = []
+
+    scan_started = perf_counter()
+    scanned = [
+        item for item in scan_repository(root, warnings=warnings)
+        if not config.ignored(item.component.path)
+    ]
+    if timings is not None:
+        timings.update({
+            "repository_scan_seconds": perf_counter() - scan_started,
+            "scanned_files": len(scanned),
+            "stage": "baseline-analysis",
+        })
+        if checkpoint is not None:
+            checkpoint()
+
+    baseline_started = perf_counter()
+    baseline = analyze_scanned_repository(root, scanned, config=config, warnings=warnings)
+    if timings is not None:
+        timings.update({
+            "baseline_analysis_seconds": perf_counter() - baseline_started,
+            "stage": "semantic-analysis",
+        })
+        if checkpoint is not None:
+            checkpoint()
+
+    # Baseline dependency resolution has already populated each component. Reuse
+    # that exact graph rather than resolving the same imports a second time.
+    file_graph = {
+        component.path: set(component.resolved_dependencies)
+        for component in baseline.components
+    }
+    semantic_started = perf_counter()
+    semantic = build_semantic_graph(
+        scanned,
+        file_dependencies=file_graph,
+        telemetry=timings,
+        checkpoint=checkpoint,
+    )
+    if timings is not None:
+        timings.update({
+            "semantic_analysis_seconds": perf_counter() - semantic_started,
+            "total_analysis_seconds": perf_counter() - total_started,
+            "stage": "analysis-complete",
+        })
+        if checkpoint is not None:
+            checkpoint()
     return baseline, semantic
 
 
@@ -111,6 +168,14 @@ def _scan_payload(root: Path, baseline, semantic, *, canonical: bool) -> dict:
     }
 
 
+def _write_timings(path: str | Path, payload: MutableMapping[str, Any]) -> None:
+    target = Path(path).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(json.dumps(dict(payload), indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+    temporary.replace(target)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ouroboros",
@@ -118,6 +183,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("path", nargs="?", default=".", help="Repository/folder to scan (default: current folder)")
     parser.add_argument("--json", dest="json_path", help="Also save the full result as JSON")
+    parser.add_argument(
+        "--timings-json",
+        dest="timings_path",
+        help="Checkpoint scan-stage timings and progress as JSON without changing analysis semantics",
+    )
     parser.add_argument(
         "--report",
         dest="report_path",
@@ -140,8 +210,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.rating_only and (args.quiet or args.json_path or args.report_path):
-        parser.error("--rating-only cannot be combined with --quiet, --json, or --report")
+    if args.rating_only and (args.quiet or args.json_path or args.report_path or args.timings_path):
+        parser.error("--rating-only cannot be combined with --quiet, --json, --report, or --timings-json")
 
     root = Path(args.path).expanduser().resolve()
     if args.rating_only:
@@ -153,9 +223,52 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_rating(baseline.metrics.ouroboros_index))
         return 0
 
+    timings: dict[str, Any] | None = None
+    checkpoint: Callable[[], None] | None = None
+    checkpoint_failed = False
+    if args.timings_path:
+        timings = {
+            "schema": {"name": "ouroboros-scan-timings", "version": 1},
+            "status": "running",
+            "repository": str(root),
+            "stage": "starting",
+        }
+
+        def persist_checkpoint() -> None:
+            nonlocal checkpoint_failed
+            if checkpoint_failed:
+                return
+            try:
+                _write_timings(args.timings_path, timings)
+            except OSError as exc:
+                checkpoint_failed = True
+                raise _TimingCheckpointError(str(exc)) from exc
+
+        checkpoint = persist_checkpoint
+        try:
+            checkpoint()
+        except _TimingCheckpointError as exc:
+            print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+            return 2
+
     try:
-        baseline, semantic = scan(root, use_repo_config=not args.canonical)
+        baseline, semantic = scan(
+            root,
+            use_repo_config=not args.canonical,
+            timings=timings,
+            checkpoint=checkpoint,
+        )
+    except _TimingCheckpointError as exc:
+        print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+        return 2
     except (OSError, ValueError) as exc:
+        if timings is not None:
+            timings.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
+            assert checkpoint is not None
+            try:
+                checkpoint()
+            except _TimingCheckpointError as timing_exc:
+                print(f"Ouroboros could not write timings {args.timings_path}: {timing_exc}")
         print(f"Ouroboros could not scan {root}: {exc}")
         return 2
 
@@ -163,6 +276,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_friendly_summary(root, baseline, semantic))
 
     if args.json_path:
+        json_started = perf_counter()
         payload = _scan_payload(root, baseline, semantic, canonical=args.canonical)
         target = Path(args.json_path).expanduser()
         try:
@@ -172,8 +286,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                 encoding="utf-8",
             )
         except OSError as exc:
+            if timings is not None:
+                timings.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
+                assert checkpoint is not None
+                try:
+                    checkpoint()
+                except _TimingCheckpointError as timing_exc:
+                    print(f"Ouroboros could not write timings {args.timings_path}: {timing_exc}")
             print(f"Ouroboros could not write {target}: {exc}")
             return 2
+        if timings is not None:
+            timings["json_write_seconds"] = perf_counter() - json_started
+            assert checkpoint is not None
+            try:
+                checkpoint()
+            except _TimingCheckpointError as exc:
+                print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+                return 2
         if not args.quiet:
             print(f"\nFull JSON saved to: {target.resolve()}")
 
@@ -181,11 +310,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             report_path = write_living_report(root, baseline, semantic, args.report_path)
         except (OSError, ValueError) as exc:
+            if timings is not None:
+                timings.update({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
+                assert checkpoint is not None
+                try:
+                    checkpoint()
+                except _TimingCheckpointError as timing_exc:
+                    print(f"Ouroboros could not write timings {args.timings_path}: {timing_exc}")
             print(f"Ouroboros could not write report {args.report_path}: {exc}")
             return 2
         if not args.quiet:
             print(f"\nLiving Repository Anatomy report saved to: {report_path}")
 
+    if timings is not None:
+        timings.update({"status": "complete", "stage": "complete"})
+        assert checkpoint is not None
+        try:
+            checkpoint()
+        except _TimingCheckpointError as exc:
+            print(f"Ouroboros could not write timings {args.timings_path}: {exc}")
+            return 2
     return 0
 
 

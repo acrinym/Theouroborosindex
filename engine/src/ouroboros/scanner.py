@@ -59,9 +59,9 @@ def _is_binary(data: bytes) -> bool:
     return bad / max(1, len(sample)) > 0.05
 
 
-def _python_non_code_lines(text: str) -> set[int]:
+def _python_non_code_lines(text: str, lines: list[str] | None = None) -> set[int]:
     non_code: set[int] = set()
-    lines = text.splitlines()
+    lines = text.splitlines() if lines is None else lines
     try:
         tokens = tokenize.generate_tokens(io.StringIO(text).readline)
         for token in tokens:
@@ -92,8 +92,9 @@ def _python_non_code_lines(text: str) -> set[int]:
     return non_code
 
 
-def _code_lines(text: str, language: str) -> int:
-    python_non_code = _python_non_code_lines(text) if language == "python" else set()
+def _code_lines(text: str, language: str, lines: list[str] | None = None) -> int:
+    lines = text.splitlines() if lines is None else lines
+    python_non_code = _python_non_code_lines(text, lines) if language == "python" else set()
     c_block_languages = {"c", "cpp", "csharp", "java", "javascript", "typescript", "tsx", "kotlin", "swift", "go", "rust", "php", "css"}
     slash_comment_languages = c_block_languages | {"scss"}
     hash_comment_languages = {"python", "ruby", "powershell", "shell", "yaml", "toml", "php"}
@@ -101,7 +102,7 @@ def _code_lines(text: str, language: str) -> int:
 
     count = 0
     in_block = False
-    for line_number, raw in enumerate(text.splitlines(), 1):
+    for line_number, raw in enumerate(lines, 1):
         line = raw.strip()
         if not line:
             continue
@@ -135,8 +136,9 @@ def _imports(text: str, language: str) -> list[str]:
     return sorted(set(found))
 
 
-def _looks_generated(text: str) -> bool:
-    for raw in text.splitlines()[:12]:
+def _looks_generated(text: str, lines: list[str] | None = None) -> bool:
+    lines = text.splitlines() if lines is None else lines
+    for raw in lines[:12]:
         line = raw.strip().lower()
         if not line or not line.startswith(_COMMENTISH_HEADER_PREFIXES):
             continue
@@ -170,12 +172,13 @@ def scan_repository(
         if len(data) > max_file_bytes or _is_binary(data):
             continue
         text = data.decode("utf-8", errors="replace")
-        if _looks_generated(text):
+        lines = text.splitlines()
+        if _looks_generated(text, lines):
             generated_skipped += 1
             continue
         component = Component(
-            path=relative.as_posix(), language=language, lines=len(text.splitlines()),
-            code_lines=_code_lines(text, language), bytes=len(data), imports=_imports(text, language),
+            path=relative.as_posix(), language=language, lines=len(lines),
+            code_lines=_code_lines(text, language, lines), bytes=len(data), imports=_imports(text, language),
         )
         scanned.append(ScannedFile(component=component, text=text))
     if warnings is not None and generated_skipped:
